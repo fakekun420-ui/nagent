@@ -1,0 +1,14 @@
+# Binarios, modelos y artefactos de build NUNCA en el repo (regla de la Etapa 0.5).
+# Viven en /data/adb/nagent/ en el dispositivo.
+*.gguf
+*.tar.gz
+*.zip
+*.apk
+*.so
+bin/
+lib/
+models/
+
+# Resultados del spike: pesan y se regeneran
+docs/spike-datos/
+*.raw.json
