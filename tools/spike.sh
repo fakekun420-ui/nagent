@@ -53,6 +53,13 @@
 #     peticion, que es lo que permite distinguir frio de caliente midiendo `cache_n` y no por
 #     cronometro.
 #
+# v3 (namespace + formatos + paradas). Todo acceso a $LOGS/$MOD pasa por $NS via
+# alog/acat/als; el bench corre con `-o csv` y se parsea avg_ts (fila pp: n_gen=0, fila tg:
+# n_prompt=0); `parar_server` hace UN kill por $NS con comm justo antes, espera a que /proc/PID
+# desaparezca y verifica el puerto; el sostenido encadena tramos hasta llenar SUSTAIN_S y
+# registra temp maxima y deriva de tg; en TTFT la metrica es prompt_ms/cache_n y el primer byte
+# de curl queda como contraste. Salida 5 = puerto ocupado o kill fallido (abortan la corrida).
+#
 # --
 # Uso:
 #   sh tools/spike.sh --dry-run            # imprime el plan. NO crea nada: ni un directorio
@@ -140,17 +147,41 @@ esac
 
 say() { echo "[$(date '+%H:%M:%S')] $*"; }
 
-# Log nuevo, nunca encima de otro. Imprime la ruta usada.
+# --------------------------------------------------------------- arbol de Android
+# Punto 1: $LOGS (y $MOD) existen SOLO en el namespace de Android. Todo acceso a ese arbol pasa
+# por $NS. Lo que corria en el chroot y tocaba $LOGS —`nuevo_log`, `>>`, `grep`, globs,
+# `tg_de`, `snapshot`, `"$NS cmd > $out"`— escribia en el espejo parcial del chroot o fallaba.
+# La redireccion `"$NS cmd > $out"` es el caso traicionero: el comando corre en Android pero el
+# `>` lo abre el shell del chroot. La regla: el `>`/`>>` de un fichero Android vive DENTRO de
+# la cadena de `$NS sh -c`, o se escribe por stdin con `alog`.
+#
+# Si $NS falla, `alog` lo grita por consola y devuelve 1: con `set -e` el script aborta haciendo
+# ruido en vez de seguir midiendo sobre logs que no existen.
+
+alog() { # $1 fichero Android; stdin -> append en Android
+  $NS sh -c 'cat >> "$1"' _ "$1" || { say "FALLO al escribir en $1 (Android inalcanzable)"; return 1; }
+}
+
+acat() { # $1 fichero Android -> stdout del chroot
+  $NS cat "$1"
+}
+
+als() { # $1 directorio Android -> nombres, uno por linea
+  $NS ls -1 "$1"
+}
+
+# Log nuevo, nunca encima de otro. Imprime la ruta usada. El test de existencia y la creacion
+# son en Android: en el chroot ese test miraria el espejo parcial y mentiria.
 nuevo_log() {
   f=$1
-  if [ -e "$f" ]; then f="$f.$(date +%s)"; fi
-  : > "$f"
+  while $NS test -e "$f" 2>/dev/null; do f="$f.$(date +%s)"; sleep 1; done
+  $NS sh -c ': > "$1"' _ "$f"
   echo "$f"
 }
 
 # El unico modo de dejar constancia de que algo no se pudo hacer.
-marca_fallo() { # $1 fichero, $2 motivo
-  echo "FALLO $2" >> "$1"
+marca_fallo() { # $1 fichero Android, $2 motivo
+  printf 'FALLO %s\n' "$2" | alog "$1"
   say "FALLO $2 (en $1)"
 }
 
@@ -205,8 +236,10 @@ mem_avail_mb() { $NS awk '/^MemAvailable:/ {printf "%d", $2/1024}' /proc/meminfo
 snapshot() {
   # `battC` va en la MISMA linea que el resto del estado, para que cada celda lleve su carga y su
   # temperatura de bateria. Sin esto, despues no se puede invalidar una celda concreta.
+  # `load1` se lee en el chroot a proposito: /proc/loadavg es global del kernel, identico en
+  # todos los namespaces de montaje. Todo lo demas sale de $NS y el append va por `alog`.
   SNAP="load1=$(load1) cpu4=$(temp_of "$ZONE_CPU4") cpu5=$(temp_of "$ZONE_CPU5") cpu6=$(temp_of "$ZONE_CPU6") prime=$(prime_temp) battC=$(batt_temp) memMB=$(mem_avail_mb)"
-  echo "$SNAP" >> "$LOGS/estado.log"
+  printf '%s\n' "$SNAP" | alog "$LOGS/estado.log"
 }
 
 gate() { # $1 etiqueta -> 0 seguir, 1 contaminado
@@ -260,9 +293,9 @@ verify_sha() {
   chk() { # $1 fichero modelo, $2 sha
     got=$($NS sha256sum "$1" 2>/dev/null | cut -d' ' -f1 || true)
     if [ "$got" = "$2" ]; then
-      echo "$1  OK  $got" >> "$out"
+      printf '%s  OK  %s\n' "$1" "$got" | alog "$out"
     else
-      echo "FALLO sha $1 esperado=$2 obtenido=${got:-<ilegible>}" >> "$out"
+      printf 'FALLO sha %s esperado=%s obtenido=%s\n' "$1" "$2" "${got:-<ilegible>}" | alog "$out"
       say "FALLO sha de $1"
       rc=1
     fi
@@ -277,47 +310,73 @@ verify_sha() {
 probe_capabilities() {
   say "sondeando capacidades del binario (b11146)"
   v=$(nuevo_log "$LOGS/version.txt")
-  echo "# llama-bench --version" > "$v"
-  if $NS "$BIN/llama-bench" --version >> "$v" 2>&1; then :; else marca_fallo "$v" "llama-bench --version"; fi
+  printf '# llama-bench --version\n' | alog "$v"
+  if $NS sh -c '"$1" --version >> "$2" 2>&1' _ "$BIN/llama-bench" "$v"; then :; else marca_fallo "$v" "llama-bench --version"; fi
 
   h=$(nuevo_log "$LOGS/server-help.txt")
-  echo "# llama-server --help" > "$h"
-  if $NS "$BIN/llama-server" --help >> "$h" 2>&1; then :; else marca_fallo "$h" "llama-server --help"; fi
+  printf '# llama-server --help\n' | alog "$h"
+  if $NS sh -c '"$1" --help >> "$2" 2>&1' _ "$BIN/llama-server" "$h"; then :; else marca_fallo "$h" "llama-server --help"; fi
 
   # Las capacidades se LEEN del texto, no se suponen. Verificado en common/arg.cpp de b11146:
   # --cache-prompt (3570), --cache-reuse (3578), --slot-save-path (3610).
+  # El `grep` tambien corre en Android: `$h` no existe en el chroot.
   c=$(nuevo_log "$LOGS/capacidades.txt")
   for flag in --cache-prompt --cache-reuse --slot-save-path; do
-    if grep -q -- "$flag" "$h"; then echo "$flag presente" >> "$c"; else echo "$flag AUSENTE" >> "$c"; fi
+    if $NS grep -q -- "$flag" "$h"; then printf '%s presente\n' "$flag" | alog "$c"; else printf '%s AUSENTE\n' "$flag" | alog "$c"; fi
   done
-  assert_affinity "$AFF_3" "$AFF_3_LIST" "preflight-3hilos" >> "$c"
-  assert_affinity "$AFF_4" "$AFF_4_LIST" "preflight-4hilos" >> "$c"
+  assert_affinity "$AFF_3" "$AFF_3_LIST" "preflight-3hilos" | alog "$c"
+  assert_affinity "$AFF_4" "$AFF_4_LIST" "preflight-4hilos" | alog "$c"
   say "capacidades -> $c"
 }
 
 # --------------------------------------------------------------- A. llama-bench
-run_bench() { # $1 modelo, $2 afinidad, $3 lista cpus, $4 hilos
+# Punto 2: se pide `-o csv` y se parsean pp512 y tg128 en t/s desde la columna `avg_ts`.
+# Verificado en tools/llama-bench/llama-bench.cpp de b11146 (commit 7fe450e1):
+#   · `-o csv|json|jsonl|md|sql` a stdout, default md (README + cpp:435);
+#   · el csv NO trae columna de nombre de test: trae `n_prompt`,`n_gen`,`avg_ts`,... (get_fields);
+#   · fila pp: n_gen=0; fila tg: n_prompt=0 (construccion de tests, cpp:~1330-1400);
+#   · 'eval time' y 'tokens per second' aparecen CERO veces en el fuente: el parser anterior
+#     buscaba cadenas que el binario real nunca imprime, y el stub las inventaba.
+# La cola de cada fila de datos es `"n_prompt","n_gen","n_depth","test_time","avg_ns",
+# "stddev_ns","avg_ts","stddev_ts"`, todo entrecomillado; `csv_cols` extrae esos tres numeros.
+# Cabeceras repetidas, stderr del backend y cualquier otra linea que no case se ignoran solas.
+csv_cols() { # stdin csv -> lineas "n_prompt n_gen avg_ts" (una por fila de datos)
+  sed -n 's/.*"\([0-9][0-9]*\)","\([0-9][0-9]*\)","\([0-9][0-9]*\)","\([^"]*\)","\([0-9][0-9]*\)","\([0-9][0-9]*\)","\([0-9.eE+-][0-9.eE+-]*\)","\([0-9.eE+-][0-9.eE+-]*\)"$/\1 \2 \7/p'
+}
+csv_max() { # $1 pp|tg; stdin csv -> max avg_ts de ese tipo, o NA
+  tipo=$1
+  csv_cols | awk -v tipo="$tipo" '((tipo=="pp"&&$2==0)||(tipo=="tg"&&$1==0)){if($3>m)m=$3} END{if(m=="")print "NA";else printf "%.2f",m}'
+}
+csv_filas() { # stdin csv -> "pp tg" (cuenta de filas de cada tipo)
+  csv_cols | awk '$2==0{p++} $1==0{t++} END{print (p+0)" "(t+0)}'
+}
+
+run_bench() { # $1 modelo (basename), $2 afinidad, $3 lista cpus, $4 hilos
   m=$1; aff=$2; afflist=$3; thr=$4
   tag=$(celda_tag "$m" "$thr")
-  out=$(nuevo_log "$LOGS/bench-$tag.log")
+  out=$(nuevo_log "$LOGS/bench-$tag.csv")
   {
-    echo "# modelo=$(basename "$m")  hilos=$thr  afinidad=$aff($afflist)"
-    echo "# repeticiones=$REPS  prompt=512  generada=128"
-  } > "$out"
+    printf '# modelo=%s  hilos=%s  afinidad=%s(%s)\n' "$(basename "$m")" "$thr" "$aff" "$afflist"
+    printf '# repeticiones=%s  prompt=512  generada=128  formato=csv (n_prompt,n_gen,avg_ts)\n' "$REPS"
+  } | alog "$out"
   r=1
   while [ "$r" -le "$REPS" ]; do
     if ! gate "bench $tag rep$r"; then
-      echo "rep$r CONTAMINADA" >> "$out"
+      printf 'rep%s CONTAMINADA\n' "$r" | alog "$out"
     else
-      echo "rep$r inicio $SNAP" >> "$out"
-      if $NS taskset "$aff" "$BIN/llama-bench" -m "$m" -p 512 -n 128 -t "$thr" -r 1 >> "$out" 2>&1; then
-        if ! grep -q 'eval time' "$out"; then
-          marca_fallo "$out" "llama-bench termino sin linea de resultado (rep$r)"
-        fi
+      printf 'rep%s inicio %s\n' "$r" "$SNAP" | alog "$out"
+      # Filas antes y despues: si la rep no anadio su fila pp y su fila tg, no midio.
+      antes=$(acat "$out" | csv_filas)
+      if $NS sh -c "taskset $aff $BIN/llama-bench -m $MOD/$m -p 512 -n 128 -t $thr -r 1 -o csv >> $out 2>&1"; then
+        despues=$(acat "$out" | csv_filas)
+        set -- $antes; app=$1; atg=$2
+        set -- $despues; dpp=$1; dtg=$2
+        [ "$dpp" -gt "$app" ] || marca_fallo "$out" "llama-bench sin fila pp512 (rep$r)"
+        [ "$dtg" -gt "$atg" ] || marca_fallo "$out" "llama-bench sin fila tg128 (rep$r)"
       else
         marca_fallo "$out" "llama-bench devolvio error (rep$r)"
       fi
-      assert_affinity "$aff" "$afflist" "bench-$tag rep$r" >> "$out"
+      assert_affinity "$aff" "$afflist" "bench-$tag rep$r" | alog "$out"
       sleep "$COOLDOWN_S"
     fi
     r=$((r + 1))
@@ -325,38 +384,28 @@ run_bench() { # $1 modelo, $2 afinidad, $3 lista cpus, $4 hilos
   say "bench $tag -> $out"
 }
 
-# tg128 leido de la linea `eval time` del bench: "..., 22.07 tokens per second)". Se queda con el
-# MAYOR de las repeticiones del log, porque lo que interesa es el mejor caso de cada modelo, no
-# una media contaminada por una repeticion mala.
-tg_de() { # $1 log de bench
-  grep 'tokens per second' "$1" 2>/dev/null \
-    | sed 's/.*tokens per second[^0-9]*\([0-9][0-9.]*\).*/\1/' \
-    | awk 'NF { if ($1 > m) m = $1 } END { if (m == "") print "NA"; else printf "%.2f", m }' \
-    || echo "NA"
-}
-
-# Elige el 3B con mejor tg en el bench. Si ningun 3B tiene una linea de resultado utilizable, lo
+# Elige el 3B con mejor tg en el bench. Si ningun 3B tiene una fila tg utilizable, lo
 # dice y devuelve 1: es mejor no hacer la segunda pasada que hacerla sobre un numero inventado.
 elegir_3b_ganador() {
   mejor=; mejor_tg=-1
   d=$(nuevo_log "$LOGS/ganador-3b.txt")
   {
-    echo "# tg128 leido de los logs de bench del Spike 0.5"
-    echo "# criterio: el MAYOR tg128 de sus dos celdas (t3 y t4) por modelo"
-  } > "$d"
+    printf '# tg128 (avg_ts del csv) leido de los logs de bench del Spike 0.5\n'
+    printf '# criterio: el MAYOR tg128 de sus dos celdas (t3 y t4) por modelo\n'
+  } | alog "$d"
   for m in $MODELS_3B; do
     b=$(basename "$m" .gguf)
     mejor_m=-1
     for tag in t3 t4; do
-      f="$LOGS/bench-$b-$tag.log"
-      [ -e "$f" ] || continue
-      tg=$(tg_de "$f")
-      echo "  $(basename "$f")  tg128=$tg" >> "$d"
+      f="$LOGS/bench-$b-$tag.csv"
+      $NS test -e "$f" 2>/dev/null || continue
+      tg=$(acat "$f" | csv_max tg)
+      printf '  %s  tg128=%s\n' "$(basename "$f")" "$tg" | alog "$d"
       if [ "$tg" != "NA" ] && awk "BEGIN{exit !($tg > $mejor_m)}"; then mejor_m=$tg; fi
     done
     if awk "BEGIN{exit !($mejor_m > $mejor_tg)}"; then mejor_tg=$mejor_m; mejor=$m; fi
   done
-  echo "ganador: ${mejor:-<ninguno>}  tg128=$mejor_tg" >> "$d"
+  printf 'ganador: %s  tg128=%s\n' "${mejor:-<ninguno>}" "$mejor_tg" | alog "$d"
   say "3B ganador del bench: ${mejor:-<ninguno>} (tg128=$mejor_tg) -> $d"
   if [ -z "$mejor" ]; then
     return 1
@@ -370,37 +419,50 @@ elegir_3b_ganador() {
 #   · primer byte, segun el propio curl: %{time_starttransfer}, en segundos con 3 decimales;
 #   · lo que declara el servidor: cache_n, prompt_n, prompt_ms... del bloque `timings`.
 # Si el servidor no devuelve `timings`, eso es un FALLO, no un cero.
-ttft_request() { # $1 fichero de cuerpo JSON, $2 fichero donde dejar el SSE
-  curl -sN -m 120 -X POST "http://127.0.0.1:$SERVER_PORT/v1/chat/completions" \
+# Punto 5: el cuerpo via stdin (@-) y el SSE se captura por stdout con `-w '\n%{time_starttransfer}'`:
+# la ultima linea es el primer byte, el resto el SSE. Asi no hay ficheros temporales .body/.sse
+# en ningun namespace. El primer byte queda como CONTRASTE: `time_starttransfer` mide hasta el
+# primer byte incluyendo cabeceras de respuesta, no es latencia de computo pura.
+ttft_request() { # $1 JSON (string); stdout: "<sse...>\n<primer_byte_s>"
+  printf '%s' "$1" | curl -sN -m 120 -X POST "http://127.0.0.1:$SERVER_PORT/v1/chat/completions" \
     -H 'Content-Type: application/json' \
-    --data-binary "@$1" \
-    -o "$2" \
-    -w '%{time_starttransfer}' 2>/dev/null || echo ""
+    --data-binary @- \
+    -w '\n%{time_starttransfer}' 2>/dev/null || true
 }
 
-# Lee un numero del bloque timings del SSE. Nombres VERIFICADOS en b11146 (tools/server/README.md).
-timing_de() { # $1 fichero SSE, $2 clave
-  tr -d '\n' < "$1" \
-  | grep -o "\"$2\" *: *[-0-9.]*" | tail -1 | sed "s/.*: *//" || true
+# Lee un numero del bloque timings del SSE (por stdin). Nombres VERIFICADOS en b11146
+# (tools/server/README.md): cache_n, prompt_n, prompt_ms, predicted_n, predicted_ms,
+# predicted_per_second.
+timing_de() { # $1 clave; SSE por stdin
+  tr -d '\n' \
+  | grep -o "\"$1\" *: *[-0-9.]*" | tail -1 | sed "s/.*: *//" || true
 }
 
-run_prefix_cache() { # $1 modelo
+run_prefix_cache() { # $1 modelo (basename)
   m=$1
   [ -n "$m" ] || { say "FALLO: modelo de prefijo vacio"; return 0; }
   tag="$(basename "$m" .gguf)-prefijo"
   srvlog=$(nuevo_log "$LOGS/server-$tag.log")
   reqs=$(nuevo_log "$LOGS/ttft-$tag.txt")
   {
-    echo "# modelo=$(basename "$m")  prefijo-unico-modelo=si"
-    echo "# cache: flag --cache-prompt en el servidor + campo cache_prompt en cada peticion"
-  } > "$reqs"
+    printf '# modelo=%s  prefijo-unico-modelo=si\n' "$(basename "$m")"
+    printf '# cache: flag --cache-prompt en el servidor + campo cache_prompt en cada peticion\n'
+    printf '# metrica principal: prompt_ms y cache_n del servidor; primerByte_s de curl es contraste\n'
+  } | alog "$reqs"
 
   if ! gate "server $tag"; then marca_fallo "$reqs" "servidor CONTAMINADO"; return 0; fi
-  echo "inicio $SNAP" >> "$srvlog"
+  printf 'inicio %s\n' "$SNAP" | alog "$srvlog"
 
-  $NS taskset "$AFF_3" "$BIN/llama-server" -m "$m" \
-      --host 127.0.0.1 --port "$SERVER_PORT" --ctx-size "$SRV_CTX" \
-      --np 1 --cache-prompt --n-gpu-layers 0 > "$srvlog" 2>&1 &
+  # Punto 3: antes de lanzar, el puerto tiene que estar libre. Si responde, hay otro servidor
+  # (nuestro de una corrida anterior o de otra sesion) y levantar el nuestro seria medir al otro.
+  if curl -s -m 2 "http://127.0.0.1:$SERVER_PORT/health" >/dev/null 2>&1; then
+    marca_fallo "$reqs" "el puerto $SERVER_PORT ya responde antes de lanzar; no se mide al otro"
+    exit 5
+  fi
+
+  # La redireccion vive DENTRO de la cadena de $NS (punto 1): el `>` lo abre el shell de Android.
+  # `-m` lleva ruta completa de Android ($MOD/$m): el basename solo existe ahi, no en el chroot.
+  $NS sh -c "taskset $AFF_3 $BIN/llama-server -m $MOD/$m --host 127.0.0.1 --port $SERVER_PORT --ctx-size $SRV_CTX --np 1 --cache-prompt --n-gpu-layers 0 > $srvlog 2>&1" &
   # MEDIDO: `nsenter` hace exec y CONSERVA el PID. Lanzado `nsenter -t 1 -m -- <cmd> &`, `$!` da un
   # PID que EXISTE en el namespace de Android y cuyo /proc/$PID/status se lee ahi con el comm ya
   # cambiado al del programa final. Por eso el PID se saca de lo que LANZAMOS y no de una busqueda
@@ -426,7 +488,7 @@ run_prefix_cache() { # $1 modelo
   done
   if [ "$i" -ge "$SERVER_WAIT_S" ]; then
     marca_fallo "$reqs" "el server no levanto en ${SERVER_WAIT_S}s (ver $srvlog)"
-    parar_server
+    parar_server "$reqs" puerto || exit 5
     return 0
   fi
   say "server listo tras ${i}s"
@@ -437,7 +499,7 @@ run_prefix_cache() { # $1 modelo
   case "$comm_real" in
     llama-server*) say "PID propio confirmado: $SRV_PID  comm=$comm_real" ;;
     *) marca_fallo "$reqs" "el PID $SRV_PID no es llama-server (comm=${comm_real:-<ilegible>}); no se mata por nombre"
-       parar_server
+       parar_server "$reqs" puerto || exit 5
        return 0 ;;
   esac
 
@@ -450,120 +512,175 @@ run_prefix_cache() { # $1 modelo
   i=0
   while [ "$i" -lt "$TTFT_REQS" ]; do
     if ! gate "ttft $tag p$i"; then
-      echo "p$i CONTAMINADA" >> "$reqs"
+      printf 'p%s CONTAMINADA\n' "$i" | alog "$reqs"
     else
-      body="$LOGS/.body-$tag-$i.json"
-      printf '{"messages":[{"role":"system","content":%s},{"role":"user","content":"abre la aplicacion numero %s"}],"stream":true,"max_tokens":32,"cache_prompt":true}' \
-        "$(printf '%s' "$SYS" | awk '{printf "\"%s\"", $0}')" "$i" > "$body"
-      sse="$LOGS/.sse-$tag-$i.txt"
-      primer_byte=$(ttft_request "$body" "$sse")
-      cache_n=$(timing_de "$sse" cache_n)
-      prompt_n=$(timing_de "$sse" prompt_n)
-      prompt_ms=$(timing_de "$sse" prompt_ms)
-      pred_n=$(timing_de "$sse" predicted_n)
-      pred_ms=$(timing_de "$sse" predicted_ms)
-      pred_ps=$(timing_de "$sse" predicted_per_second)
+      body=$(printf '{"messages":[{"role":"system","content":%s},{"role":"user","content":"abre la aplicacion numero %s"}],"stream":true,"max_tokens":32,"cache_prompt":true}' \
+        "$(printf '%s' "$SYS" | awk '{printf "\"%s\"", $0}')" "$i")
+      resp=$(ttft_request "$body")
+      primer_byte=$(printf '%s' "$resp" | tail -n 1)
+      sse=$(printf '%s' "$resp" | sed '$d')
+      cache_n=$(printf '%s' "$sse" | timing_de cache_n)
+      prompt_n=$(printf '%s' "$sse" | timing_de prompt_n)
+      prompt_ms=$(printf '%s' "$sse" | timing_de prompt_ms)
+      pred_n=$(printf '%s' "$sse" | timing_de predicted_n)
+      pred_ms=$(printf '%s' "$sse" | timing_de predicted_ms)
+      pred_ps=$(printf '%s' "$sse" | timing_de predicted_per_second)
       if [ -z "$primer_byte" ] && [ -z "$prompt_ms" ]; then
-        echo "p$i FALLO la peticion no devolvio ni primer byte ni timings" >> "$reqs"
+        printf 'p%s FALLO la peticion no devolvio ni primer byte ni timings\n' "$i" | alog "$reqs"
       else
         # Un 0 aqui seria mentira: si el server no contesto, no hay velocidad, hay un fallo.
+        # Punto 5: la metrica principal es prompt_ms/cache_n; primerByte_s es contraste.
         if [ -z "$primer_byte" ]; then primer_byte="FALLO-sin-primer-byte"; fi
         if [ -z "$prompt_ms" ];   then prompt_ms="FALLO-sin-timings"; fi
         if [ -z "$cache_n" ];     then cache_n="FALLO-sin-timings"; fi
-        echo "p$i  primerByte_s=$primer_byte  prompt_ms=$prompt_ms  cache_n=$cache_n  prompt_n=$prompt_n  predicted_n=$pred_n  predicted_ms=$pred_ms  tok_s=$pred_ps  $SNAP" >> "$reqs"
+        printf 'p%s  prompt_ms=%s  cache_n=%s  prompt_n=%s  predicted_n=%s  predicted_ms=%s  tok_s=%s  primerByte_s=%s(contraste)  %s\n' \
+          "$i" "$prompt_ms" "$cache_n" "$prompt_n" "$pred_n" "$pred_ms" "$pred_ps" "$primer_byte" "$SNAP" | alog "$reqs"
       fi
-      rm -f "$body" "$sse" 2>/dev/null || true
       sleep 3
     fi
     i=$((i + 1))
   done
 
   r=$(nuevo_log "$LOGS/ram-$tag.txt")
-  echo "# VmHWM/VmRSS del server (PID $SRV_PID en el namespace de Android)" > "$r"
-  if $NS grep -E 'VmHWM|VmRSS' "/proc/$SRV_PID/status" >> "$r" 2>&1; then :; else marca_fallo "$r" "no se pudo leer /proc/$SRV_PID"; fi
+  printf '# VmHWM/VmRSS del server (PID %s en el namespace de Android)\n' "$SRV_PID" | alog "$r"
+  if $NS sh -c "grep -E 'VmHWM|VmRSS' /proc/$SRV_PID/status >> $r 2>&1"; then :; else marca_fallo "$r" "no se pudo leer /proc/$SRV_PID"; fi
 
-  parar_server
+  parar_server "$reqs" puerto || exit 5
   say "ttft $tag -> $reqs"
 }
 
+# Punto 3: UN SOLO kill, el que corresponde por $NS, con comprobacion de comm justo antes.
+# Tras el kill se espera hasta que /proc/PID desaparezca; si sigue vivo, FALLO y se aborta
+# (un kill que no mata deja el puerto ocupado y contamina la siguiente medida).
+# $1 log de FALLOs, $2 "puerto" si ademas hay que verificar que el puerto queda libre.
 parar_server() {
   # Matar SIEMPRE por PID exacto, y solo si ese PID lo lanzo este script. Nunca `pkill`, nunca
   # `pgrep`, nunca `killall`, nunca un patron de nombre: en un dispositivo donde pueden coexistir
   # varias instancias, un `pkill -f llama-bench` se lleva por delante la corrida de otra sesion.
-  # La guarda de `comm` de arriba es la que evita que un PID reutilizado acabe siendo el victima.
-  if [ -n "${SRV_PID:-}" ]; then
-    $NS kill "$SRV_PID" 2>/dev/null || true
-    kill "$SRV_PID" 2>/dev/null || true
+  [ -n "${SRV_PID:-}" ] || return 0
+  comm_real=$($NS cat "/proc/$SRV_PID/comm" 2>/dev/null | tr -d ' ' || true)
+  case "$comm_real" in
+    llama-server*|llama-bench*) ;;
+    *) printf 'FALLO el PID %s no es nuestro (comm=%s); no se mata\n' "$SRV_PID" "${comm_real:-<ilegible>}" | alog "$1"
+       return 1 ;;
+  esac
+  $NS kill "$SRV_PID" 2>/dev/null || true
+  w=0
+  while $NS test -d "/proc/$SRV_PID" 2>/dev/null && [ "$w" -lt 15 ]; do sleep 1; w=$((w + 1)); done
+  if $NS test -d "/proc/$SRV_PID" 2>/dev/null; then
+    printf 'FALLO el PID %s sigue vivo 15s tras el kill\n' "$SRV_PID" | alog "$1"
+    return 1
   fi
-  sleep 5
+  if [ "${2:-}" = "puerto" ]; then
+    if curl -s -m 2 "http://127.0.0.1:$SERVER_PORT/health" >/dev/null 2>&1; then
+      printf 'FALLO el puerto %s sigue ocupado tras matar al PID %s\n' "$SERVER_PORT" "$SRV_PID" | alog "$1"
+      return 1
+    fi
+  fi
   SRV_PID=
+  return 0
 }
 
 # --------------------------------------------------------------- C. sostenido
-run_sustained() { # $1 modelo
+# Punto 4: el sostenido dura SUSTAIN_S de verdad. Un bench con -n fijo termina cuando termina;
+# aqui se encadenan tramos de -n 2048 hasta llenar la ventana, cada tramo en su propio csv para
+# poder atribuirle su tg. Se registran el MAXIMO de temperatura de la ventana y la deriva de
+# t/s (ultimo tramo terminado vs primero), no solo la foto final.
+run_sustained() { # $1 modelo (basename)
   m=$1
   tag="$(basename "$m" .gguf)-sostenido"
   out=$(nuevo_log "$LOGS/sustained-$tag.log")
-  echo "# modelo=$(basename "$m")  afinidad=$AFF_3($AFF_3_LIST)  5 min" > "$out"
+  printf '# modelo=%s  afinidad=%s(%s)  ventana=%ss  tramos de -n 2048 en csv\n' "$(basename "$m")" "$AFF_3" "$AFF_3_LIST" "$SUSTAIN_S" | alog "$out"
   if ! gate "sustained $tag"; then marca_fallo "$out" "CONTAMINADO antes de empezar"; return 0; fi
 
-  $NS taskset "$AFF_3" "$BIN/llama-bench" -m "$m" -p 512 -n 2048 -t 3 -r 1 > "$out" 2>&1 &
-  SRV_PID=$!
-  sleep 3
-  # Misma guarda que en el servidor: PID propio confirmado por comm, sin busqueda por nombre.
-  comm_real=$($NS cat "/proc/$SRV_PID/comm" 2>/dev/null | tr -d ' ' || true)
-  case "$comm_real" in
-    llama-bench*) ;;
-    *) marca_fallo "$out" "el PID $SRV_PID no es llama-bench (comm=${comm_real:-<ilegible>}); no se mata por nombre"
-       parar_server
-       return 0 ;;
-  esac
-  peak=0; e=0
-  while [ "$e" -lt "$SUSTAIN_S" ]; do
-    h=$($NS awk '/VmHWM/{print $2}' "/proc/$SRV_PID/status" 2>/dev/null || true)
-    if [ -n "${h:-}" ] && [ "$h" -gt "$peak" ]; then peak=$h; fi
-    sleep 1; e=$((e + 1))
+  lanzar_tramo() { # $1 fichero csv del tramo
+    $NS sh -c "taskset $AFF_3 $BIN/llama-bench -m $MOD/$m -p 512 -n 2048 -t 3 -r 1 -o csv >> $1 2>&1" &
+    SRV_PID=$!
+    sleep 3
+    # Misma guarda que en el servidor: PID propio confirmado por comm, sin busqueda por nombre.
+    comm_real=$($NS cat "/proc/$SRV_PID/comm" 2>/dev/null | tr -d ' ' || true)
+    case "$comm_real" in
+      llama-bench*) return 0 ;;
+      *) marca_fallo "$out" "el PID $SRV_PID no es llama-bench (comm=${comm_real:-<ilegible>}); no se mata por nombre"
+         parar_server "$out" || exit 5
+         return 1 ;;
+    esac
+  }
+
+  inicio=$(date +%s)
+  peak=0; tmax=NA; primero=; ultimo=; tramos_ok=0; chunk=0
+  tr=$(nuevo_log "$LOGS/sustained-$tag-c$chunk.csv")
+  printf '# tramo %s inicio\n' "$chunk" | alog "$tr"
+  lanzar_tramo "$tr" || return 0
+  while [ "$(($(date +%s) - inicio))" -lt "$SUSTAIN_S" ]; do
+    if $NS test -d "/proc/$SRV_PID" 2>/dev/null; then
+      h=$($NS awk '/VmHWM/{print $2}' "/proc/$SRV_PID/status" 2>/dev/null || true)
+      if [ -n "${h:-}" ] && [ "$h" -gt "$peak" ]; then peak=$h; fi
+      t=$(prime_temp)
+      if [ "$t" != "NA" ] && { [ "$tmax" = "NA" ] || [ "$t" -gt "$tmax" ]; }; then tmax=$t; fi
+      sleep 1
+    else
+      # El tramo termino antes que la ventana: su tg cuenta y se lanza otro para llenarla.
+      tg=$(acat "$tr" | csv_max tg)
+      if [ "$tg" != "NA" ]; then
+        [ -n "$primero" ] || primero=$tg
+        ultimo=$tg; tramos_ok=$((tramos_ok + 1))
+      fi
+      chunk=$((chunk + 1))
+      tr=$(nuevo_log "$LOGS/sustained-$tag-c$chunk.csv")
+      printf '# tramo %s inicio\n' "$chunk" | alog "$tr"
+      lanzar_tramo "$tr" || return 0
+    fi
   done
+  parar_server "$out" || exit 5
   if [ "$peak" -eq 0 ]; then
     marca_fallo "$out" "no se pudo leer VmHWM en ${SUSTAIN_S}s"
-  else
-    echo "sustained $(basename "$m")  RAM_pico_VmHWM=${peak}kB  temp_final=$(prime_temp)C" >> "$out"
   fi
-  parar_server
+  if [ -z "$ultimo" ]; then
+    marca_fallo "$out" "ningun tramo termino en la ventana: sin tg para la deriva"
+  else
+    [ -n "$primero" ] || primero=$ultimo
+    deriva=$(awk -v a="$primero" -v b="$ultimo" 'BEGIN{if(a>0)printf "%.1f",(b-a)/a*100;else print "NA"}')
+    printf 'sustained %s  RAM_pico_VmHWM=%skB  temp_max=%sC  tramos=%s  tg_primero=%s  tg_ultimo=%s  deriva_pct=%s\n' \
+      "$(basename "$m")" "$peak" "$tmax" "$tramos_ok" "$primero" "$ultimo" "$deriva" | alog "$out"
+  fi
   say "sustained $tag -> $out"
 }
 
 # --------------------------------------------------------------- copia al repo con sha
+# El listado y la lectura salen por $NS; el `>` cae en el repo, que si es del chroot.
 copiar_al_repo() {
   say "copiando crudo de $LOGS a $RAWDIR"
   mkdir -p "$RAWDIR"
   m=$(nuevo_log "$LOGS/manifiesto-sha256.txt")
-  echo "# copia de $LOGS -> $RAWDIR   fecha=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" > "$m"
-  for f in "$LOGS"/*.log "$LOGS"/*.txt; do
-    [ -e "$f" ] || continue
-    base=$(basename "$f")
-    cp -f "$f" "$RAWDIR/$base"
+  printf '# copia de %s -> %s   fecha=%s\n' "$LOGS" "$RAWDIR" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" | alog "$m"
+  for base in $(als "$LOGS"); do
+    case "$base" in *.log|*.csv|*.txt) ;; *) continue ;; esac
+    f="$LOGS/$base"
+    acat "$f" > "$RAWDIR/$base"
     a=$($NS sha256sum "$f" | cut -d' ' -f1 || true)
     b=$(sha256sum "$RAWDIR/$base" | cut -d' ' -f1)
     if [ -n "$a" ] && [ "$a" = "$b" ]; then
-      echo "OK    $base  $a" >> "$m"
+      printf 'OK    %s  %s\n' "$base" "$a" | alog "$m"
     else
-      echo "FALLO copia $base  origen=${a:-<ilegible>} copia=${b:-<ilegible>}" >> "$m"
+      printf 'FALLO copia %s  origen=%s copia=%s\n' "$base" "${a:-<ilegible>}" "${b:-<ilegible>}" | alog "$m"
       say "FALLO al copiar $base"
     fi
   done
-  cp -f "$m" "$RAWDIR/manifiesto-sha256.txt"
+  acat "$m" > "$RAWDIR/manifiesto-sha256.txt"
   say "manifiesto -> $RAWDIR/manifiesto-sha256.txt"
 }
 
 # Ningun log vacio sobrevive a la corrida. Esto es el punto 2, comprobado y no prometido.
+# El listado y el test de tamano corren en Android: el glob del chroot no veria estos ficheros.
 revisar_vacios() {
   say "revisando que no quede ningun log vacio"
   vacios=0
-  for f in "$LOGS"/*.log "$LOGS"/*.txt; do
-    [ -e "$f" ] || continue
-    case "$f" in *manifiesto*) continue ;; esac
-    if [ ! -s "$f" ]; then
+  for base in $(als "$LOGS"); do
+    case "$base" in *.log|*.csv|*.txt) ;; *) continue ;; esac
+    case "$base" in *manifiesto*) continue ;; esac
+    f="$LOGS/$base"
+    if $NS test ! -s "$f" 2>/dev/null; then
       marca_fallo "$f" "log vacio: la medicion no produjo nada"
       vacios=$((vacios + 1))
     fi
