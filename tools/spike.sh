@@ -91,6 +91,7 @@ MAX_LOAD=${MAX_LOAD:-3}
 MAX_TEMP_PRIME=${MAX_TEMP_PRIME:-50}
 COOLDOWN_S=${COOLDOWN_S:-90}
 SUSTAIN_S=${SUSTAIN_S:-300}
+SUSTAIN_N=${SUSTAIN_N:-2048}        # tokens por tramo del sostenido (punto 5 de la revision)
 TTFT_REQS=${TTFT_REQS:-10}
 SERVER_WAIT_S=${SERVER_WAIT_S:-180}
 SERVER_PORT=${SERVER_PORT:-18080}
@@ -168,6 +169,18 @@ acat() { # $1 fichero Android -> stdout del chroot
 
 als() { # $1 directorio Android -> nombres, uno por linea
   $NS ls -1 "$1"
+}
+
+# Punto 3 de la revision: un zombi (State Z) CONSERVA su /proc/PID, asi que `test -d` miente y
+# dice "vivo" de un proceso ya muerto: el bucle de espera de `parar_server` giraria 15 s para
+# acabar en FALLO falso. Por eso la vida se decide por State, no por existencia del directorio.
+# ¿Y por que no `wait` en vez de esto? Porque `wait $PID` BLOQUEA sin timeout en sh POSIX: con
+# un proceso colgado, el script se quedaria esperando para siempre. Cada herramienta en su
+# sitio: el State (acotado, con timeout) decide si sigue vivo; `wait` solo recoge al zombi
+# despues de muerto, para no dejar la tabla de jobs llena de cadaveres.
+vivo() { # $1 pid (namespace de Android) -> 0 si existe y NO es zombi
+  st=$(acat "/proc/$1/stat" 2>/dev/null | sed 's/^.*) //' | cut -c1 || true)
+  [ -n "$st" ] && [ "$st" != "Z" ]
 }
 
 # Log nuevo, nunca encima de otro. Imprime la ruta usada. El test de existencia y la creacion
@@ -278,10 +291,22 @@ assert_affinity() {
         | awk -F':\t' '/Cpus_allowed_list/{print $2}' | tr -d ' ' || true)
   if [ "$got" = "$2" ]; then
     echo "afinidad OK: mascara $1 -> $got  ($3)"
+    return 0
   else
     echo "AFINIDAD INCORRECTA: mascara $1 -> '${got:-<ilegible>}' esperado '$2'  ($3). LA PRUEBA NO ES VALIDA."
-    CONTAMINATED=$((CONTAMINATED + 1))
+    return 1
   fi
+}
+
+# La cuenta de CONTAMINATED vive en el shell principal. `assert_affinity ... | alog` la perdia:
+# todo pipeline corre cada elemento en un subshell y el `CONTAMINATED=$((...+1))` moria ahi.
+# Aqui el mensaje se captura por sustitucion (su subshell no toca nada) y el incremento se hace
+# fuera, donde si cuenta. Devuelve lo mismo que assert_affinity.
+nota_afinidad() { # $1 log Android; resto: args de assert_affinity
+  log=$1; shift
+  if msg=$(assert_affinity "$@"); then rc=0; else rc=1; fi
+  printf '%s\n' "$msg" | alog "$log"
+  return $rc
 }
 
 # --------------------------------------------------------------- previa
@@ -324,8 +349,8 @@ probe_capabilities() {
   for flag in --cache-prompt --cache-reuse --slot-save-path; do
     if $NS grep -q -- "$flag" "$h"; then printf '%s presente\n' "$flag" | alog "$c"; else printf '%s AUSENTE\n' "$flag" | alog "$c"; fi
   done
-  assert_affinity "$AFF_3" "$AFF_3_LIST" "preflight-3hilos" | alog "$c"
-  assert_affinity "$AFF_4" "$AFF_4_LIST" "preflight-4hilos" | alog "$c"
+  nota_afinidad "$c" "$AFF_3" "$AFF_3_LIST" "preflight-3hilos" || CONTAMINATED=$((CONTAMINATED + 1))
+  nota_afinidad "$c" "$AFF_4" "$AFF_4_LIST" "preflight-4hilos" || CONTAMINATED=$((CONTAMINATED + 1))
   say "capacidades -> $c"
 }
 
@@ -376,7 +401,7 @@ run_bench() { # $1 modelo (basename), $2 afinidad, $3 lista cpus, $4 hilos
       else
         marca_fallo "$out" "llama-bench devolvio error (rep$r)"
       fi
-      assert_affinity "$aff" "$afflist" "bench-$tag rep$r" | alog "$out"
+      nota_afinidad "$out" "$aff" "$afflist" "bench-$tag rep$r" || CONTAMINATED=$((CONTAMINATED + 1))
       sleep "$COOLDOWN_S"
     fi
     r=$((r + 1))
@@ -462,7 +487,11 @@ run_prefix_cache() { # $1 modelo (basename)
 
   # La redireccion vive DENTRO de la cadena de $NS (punto 1): el `>` lo abre el shell de Android.
   # `-m` lleva ruta completa de Android ($MOD/$m): el basename solo existe ahi, no en el chroot.
-  $NS sh -c "taskset $AFF_3 $BIN/llama-server -m $MOD/$m --host 127.0.0.1 --port $SERVER_PORT --ctx-size $SRV_CTX --np 1 --cache-prompt --n-gpu-layers 0 > $srvlog 2>&1" &
+  # El `exec` NO es decoracion: sin el, `$!` seria el `sh -c` intermedio (sh hace fork para correr
+  # la cadena) y el `comm` diria `sh`, no `llama-server`. La medicion de "nsenter conserva el PID"
+  # fue de comando directo, no de `sh -c`: no se extrapola. Con `exec taskset ...`, sh no hace
+  # fork, taskset tampoco, y `$!` ES el PID del binario final.
+  $NS sh -c "exec taskset $AFF_3 $BIN/llama-server -m $MOD/$m --host 127.0.0.1 --port $SERVER_PORT --ctx-size $SRV_CTX --np 1 --cache-prompt --n-gpu-layers 0 > $srvlog 2>&1" &
   # MEDIDO: `nsenter` hace exec y CONSERVA el PID. Lanzado `nsenter -t 1 -m -- <cmd> &`, `$!` da un
   # PID que EXISTE en el namespace de Android y cuyo /proc/$PID/status se lee ahi con el comm ya
   # cambiado al del programa final. Por eso el PID se saca de lo que LANZAMOS y no de una busqueda
@@ -566,11 +595,13 @@ parar_server() {
   esac
   $NS kill "$SRV_PID" 2>/dev/null || true
   w=0
-  while $NS test -d "/proc/$SRV_PID" 2>/dev/null && [ "$w" -lt 15 ]; do sleep 1; w=$((w + 1)); done
-  if $NS test -d "/proc/$SRV_PID" 2>/dev/null; then
+  while vivo "$SRV_PID" && [ "$w" -lt 15 ]; do sleep 1; w=$((w + 1)); done
+  if vivo "$SRV_PID"; then
     printf 'FALLO el PID %s sigue vivo 15s tras el kill\n' "$SRV_PID" | alog "$1"
     return 1
   fi
+  # Recoger al zombi: ya esta muerto (o nunca fue hijo vivo), `wait` no bloquea aqui.
+  wait "$SRV_PID" 2>/dev/null || true
   if [ "${2:-}" = "puerto" ]; then
     if curl -s -m 2 "http://127.0.0.1:$SERVER_PORT/health" >/dev/null 2>&1; then
       printf 'FALLO el puerto %s sigue ocupado tras matar al PID %s\n' "$SERVER_PORT" "$SRV_PID" | alog "$1"
@@ -590,11 +621,12 @@ run_sustained() { # $1 modelo (basename)
   m=$1
   tag="$(basename "$m" .gguf)-sostenido"
   out=$(nuevo_log "$LOGS/sustained-$tag.log")
-  printf '# modelo=%s  afinidad=%s(%s)  ventana=%ss  tramos de -n 2048 en csv\n' "$(basename "$m")" "$AFF_3" "$AFF_3_LIST" "$SUSTAIN_S" | alog "$out"
+  printf '# modelo=%s  afinidad=%s(%s)  ventana=%ss  tramos de -n %s en csv\n' "$(basename "$m")" "$AFF_3" "$AFF_3_LIST" "$SUSTAIN_S" "$SUSTAIN_N" | alog "$out"
   if ! gate "sustained $tag"; then marca_fallo "$out" "CONTAMINADO antes de empezar"; return 0; fi
 
   lanzar_tramo() { # $1 fichero csv del tramo
-    $NS sh -c "taskset $AFF_3 $BIN/llama-bench -m $MOD/$m -p 512 -n 2048 -t 3 -r 1 -o csv >> $1 2>&1" &
+    # `exec` por lo mismo que en el servidor: sin el, `$!` seria el `sh -c` y no el bench.
+    $NS sh -c "exec taskset $AFF_3 $BIN/llama-bench -m $MOD/$m -p 512 -n $SUSTAIN_N -t 3 -r 1 -o csv >> $1 2>&1" &
     SRV_PID=$!
     sleep 3
     # Misma guarda que en el servidor: PID propio confirmado por comm, sin busqueda por nombre.
@@ -613,7 +645,7 @@ run_sustained() { # $1 modelo (basename)
   printf '# tramo %s inicio\n' "$chunk" | alog "$tr"
   lanzar_tramo "$tr" || return 0
   while [ "$(($(date +%s) - inicio))" -lt "$SUSTAIN_S" ]; do
-    if $NS test -d "/proc/$SRV_PID" 2>/dev/null; then
+    if vivo "$SRV_PID"; then
       h=$($NS awk '/VmHWM/{print $2}' "/proc/$SRV_PID/status" 2>/dev/null || true)
       if [ -n "${h:-}" ] && [ "$h" -gt "$peak" ]; then peak=$h; fi
       t=$(prime_temp)
@@ -637,7 +669,7 @@ run_sustained() { # $1 modelo (basename)
     marca_fallo "$out" "no se pudo leer VmHWM en ${SUSTAIN_S}s"
   fi
   if [ -z "$ultimo" ]; then
-    marca_fallo "$out" "ningun tramo termino en la ventana: sin tg para la deriva"
+    marca_fallo "$out" "ningun tramo (-n $SUSTAIN_N) termino en ${SUSTAIN_S}s: modelo demasiado lento para este tramo; baja SUSTAIN_N o sube SUSTAIN_S"
   else
     [ -n "$primero" ] || primero=$ultimo
     deriva=$(awk -v a="$primero" -v b="$ultimo" 'BEGIN{if(a>0)printf "%.1f",(b-a)/a*100;else print "NA"}')
@@ -649,7 +681,9 @@ run_sustained() { # $1 modelo (basename)
 
 # --------------------------------------------------------------- copia al repo con sha
 # El listado y la lectura salen por $NS; el `>` cae en el repo, que si es del chroot.
+COPIADO=0
 copiar_al_repo() {
+  COPIADO=1
   say "copiando crudo de $LOGS a $RAWDIR"
   mkdir -p "$RAWDIR"
   m=$(nuevo_log "$LOGS/manifiesto-sha256.txt")
@@ -669,6 +703,19 @@ copiar_al_repo() {
   done
   acat "$m" > "$RAWDIR/manifiesto-sha256.txt"
   say "manifiesto -> $RAWDIR/manifiesto-sha256.txt"
+}
+
+# Punto 4 de la revision: ante cualquier aborto (exit 5, SHA, termicas...), rescatar lo medido
+# al repo con sha antes de salir, conservando el codigo de salida. Todo defensivo: `set +e`
+# dentro (el trap no puede fallar ni enmascarar el motivo del aborto) y COPIADO ya vale 1 desde
+# que empieza `copiar_al_repo`, asi que el rescate no puede reentrar en si mismo.
+al_salir() {
+  set +e
+  rc=$?
+  if [ "$COPIADO" -eq 0 ] && $NS test -d "$LOGS" 2>/dev/null; then
+    copiar_al_repo 2>/dev/null || say "trap EXIT: rescate parcial (salida $rc)"
+  fi
+  exit "$rc"
 }
 
 # Ningun log vacio sobrevive a la corrida. Esto es el punto 2, comprobado y no prometido.
@@ -694,6 +741,7 @@ revisar_vacios() {
 }
 
 # --------------------------------------------------------------- plan
+trap 'al_salir' EXIT
 if [ "$DRY" -eq 1 ]; then
   echo "SPIKE DRY-RUN — no se ejecuta nada y NO SE CREA NADA (ni siquiera el directorio de logs)"
   echo "crudos en    : $LOGS   (creado por el propio script, en el namespace de Android)"
@@ -717,7 +765,7 @@ if [ "$DRY" -eq 1 ]; then
   done
   echo "  B  ttft $(celda_tag "$PREFIX_MODEL" prefix)   (10 peticiones, un solo modelo)"
   echo "  B2 ttft sobre el 3B que gane el bench   (PREFIX_MODEL_3B=$PREFIX_MODEL_3B, -np 1, -c $SRV_CTX)"
-  echo "  C  sustained $(celda_tag "$PREFIX_MODEL" sustained)   (5 min)"
+  echo "  C  sustained $(celda_tag "$PREFIX_MODEL" sustained)   (ventana ${SUSTAIN_S}s, tramos -n $SUSTAIN_N)"
   exit 0
 fi
 
