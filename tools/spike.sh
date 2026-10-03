@@ -487,10 +487,11 @@ run_prefix_cache() { # $1 modelo (basename)
 
   # La redireccion vive DENTRO de la cadena de $NS (punto 1): el `>` lo abre el shell de Android.
   # `-m` lleva ruta completa de Android ($MOD/$m): el basename solo existe ahi, no en el chroot.
-  # El `exec` NO es decoracion: sin el, `$!` seria el `sh -c` intermedio (sh hace fork para correr
-  # la cadena) y el `comm` diria `sh`, no `llama-server`. La medicion de "nsenter conserva el PID"
-  # fue de comando directo, no de `sh -c`: no se extrapola. Con `exec taskset ...`, sh no hace
-  # fork, taskset tampoco, y `$!` ES el PID del binario final.
+  # El `exec` evita el fork de `sh -c`: sin el, `$!` seria el `sh` intermedio y el `comm`
+  # diria `sh`, no `llama-server`. Que `taskset` (toybox) a su vez exeque sin fork NO esta
+  # medido: es un requisito, no un dato. La medicion de "nsenter conserva el PID" fue de comando
+  # directo, no de `sh -c`: no se extrapola. Si taskset hiciera fork, la guarda de comm lo
+  # detecta (falla a seguro) y el smoke del laboratorio lo comprueba explicito (PID y comm).
   $NS sh -c "exec taskset $AFF_3 $BIN/llama-server -m $MOD/$m --host 127.0.0.1 --port $SERVER_PORT --ctx-size $SRV_CTX --np 1 --cache-prompt --n-gpu-layers 0 > $srvlog 2>&1" &
   # MEDIDO: `nsenter` hace exec y CONSERVA el PID. Lanzado `nsenter -t 1 -m -- <cmd> &`, `$!` da un
   # PID que EXISTE en el namespace de Android y cuyo /proc/$PID/status se lee ahi con el comm ya
@@ -512,6 +513,13 @@ run_prefix_cache() { # $1 modelo (basename)
 
   i=0
   while [ "$i" -lt "$SERVER_WAIT_S" ]; do
+    # Punto 2 de la revision: si el server murio, esperar 180 s es quemar bateria. Se corta en
+    # cuanto `vivo` da falso y se registra el motivo.
+    if ! vivo "$SRV_PID"; then
+      marca_fallo "$reqs" "el server murio antes de responder (PID $SRV_PID); sin esperar ${SERVER_WAIT_S}s (ver $srvlog)"
+      parar_server "$reqs" puerto || exit 5
+      return 0
+    fi
     curl -s -m 2 "http://127.0.0.1:$SERVER_PORT/health" >/dev/null 2>&1 && break
     sleep 1; i=$((i + 1))
   done
@@ -579,26 +587,33 @@ run_prefix_cache() { # $1 modelo (basename)
 }
 
 # Punto 3: UN SOLO kill, el que corresponde por $NS, con comprobacion de comm justo antes.
-# Tras el kill se espera hasta que /proc/PID desaparezca; si sigue vivo, FALLO y se aborta
-# (un kill que no mata deja el puerto ocupado y contamina la siguiente medida).
+# Tras el kill se espera hasta que /proc/PID desaparezca (zombi = muerto, ver `vivo`); si sigue
+# vivo, FALLO y se aborta (un kill que no mata deja el puerto ocupado y contamina la siguiente).
+# Punto 2 de la revision: si el proceso YA murio (crash, OOM, tramo que termino solo), no hay
+# nada que matar y NO es "no es nuestro": se vuelve 0 (verificando el puerto si toca). Solo se
+# aborta si esta VIVO con comm ajeno o si no muere tras el kill.
 # $1 log de FALLOs, $2 "puerto" si ademas hay que verificar que el puerto queda libre.
 parar_server() {
   # Matar SIEMPRE por PID exacto, y solo si ese PID lo lanzo este script. Nunca `pkill`, nunca
   # `pgrep`, nunca `killall`, nunca un patron de nombre: en un dispositivo donde pueden coexistir
   # varias instancias, un `pkill -f llama-bench` se lleva por delante la corrida de otra sesion.
   [ -n "${SRV_PID:-}" ] || return 0
-  comm_real=$($NS cat "/proc/$SRV_PID/comm" 2>/dev/null | tr -d ' ' || true)
-  case "$comm_real" in
-    llama-server*|llama-bench*) ;;
-    *) printf 'FALLO el PID %s no es nuestro (comm=%s); no se mata\n' "$SRV_PID" "${comm_real:-<ilegible>}" | alog "$1"
-       return 1 ;;
-  esac
-  $NS kill "$SRV_PID" 2>/dev/null || true
-  w=0
-  while vivo "$SRV_PID" && [ "$w" -lt 15 ]; do sleep 1; w=$((w + 1)); done
-  if vivo "$SRV_PID"; then
-    printf 'FALLO el PID %s sigue vivo 15s tras el kill\n' "$SRV_PID" | alog "$1"
-    return 1
+  if ! vivo "$SRV_PID"; then
+    say "el PID $SRV_PID ya estaba muerto (crash/OOM?); nada que matar"
+  else
+    comm_real=$($NS cat "/proc/$SRV_PID/comm" 2>/dev/null | tr -d ' ' || true)
+    case "$comm_real" in
+      llama-server*|llama-bench*) ;;
+      *) printf 'FALLO el PID %s esta VIVO pero no es nuestro (comm=%s)\n' "$SRV_PID" "${comm_real:-<ilegible>}" | alog "$1"
+         return 1 ;;
+    esac
+    $NS kill "$SRV_PID" 2>/dev/null || true
+    w=0
+    while vivo "$SRV_PID" && [ "$w" -lt 15 ]; do sleep 1; w=$((w + 1)); done
+    if vivo "$SRV_PID"; then
+      printf 'FALLO el PID %s sigue vivo 15s tras el kill\n' "$SRV_PID" | alog "$1"
+      return 1
+    fi
   fi
   # Recoger al zombi: ya esta muerto (o nunca fue hijo vivo), `wait` no bloquea aqui.
   wait "$SRV_PID" 2>/dev/null || true
@@ -710,8 +725,10 @@ copiar_al_repo() {
 # dentro (el trap no puede fallar ni enmascarar el motivo del aborto) y COPIADO ya vale 1 desde
 # que empieza `copiar_al_repo`, asi que el rescate no puede reentrar en si mismo.
 al_salir() {
-  set +e
+  # rc=$? va PRIMERO: hasta `set` resetea $?. Demostrado con mini-modelo (trap+exit 5):
+  # `set +e; rc=$?` sale con 0, `rc=$?; set +e` sale con 5. Vale para exit 2/3/4/5 y RC=1.
   rc=$?
+  set +e
   if [ "$COPIADO" -eq 0 ] && $NS test -d "$LOGS" 2>/dev/null; then
     copiar_al_repo 2>/dev/null || say "trap EXIT: rescate parcial (salida $rc)"
   fi
