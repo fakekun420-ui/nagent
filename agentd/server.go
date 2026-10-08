@@ -39,9 +39,15 @@ func NuevoServidor(cfg Config) *Servidor {
 		os.Exit(2)
 	}
 	s := &Servidor{cfg: cfg, token: tok, mux: http.NewServeMux(), rate: map[string][]time.Time{}}
+	RegistrarBajoRiesgo()
+	RegistrarSistema()
+	RegistrarApps()
+	RegistrarComunicacion()
+	RegistrarArchivos()
 	s.mux.Handle("/health", s.auth(http.HandlerFunc(s.salud)))
 	s.mux.Handle("/tools/list", s.auth(http.HandlerFunc(s.lista)))
 	s.mux.Handle("/tools/call", s.auth(http.HandlerFunc(s.llamar)))
+	s.mux.Handle("/rpc", s.auth(http.HandlerFunc(s.ManejarRPC)))
 	return s
 }
 
