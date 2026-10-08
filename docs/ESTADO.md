@@ -1,16 +1,14 @@
 # ESTADO nagent (max 25 lineas) - 2026-10-08
-Bloque actual: A1-A3 ACEPTADOS (lab verde 91/0). Siguiente: A4 cadena.
-Hecho: correr 7 fixes; spike --smoke-server (18 lin); prep cache +
-  lib + test-cache 10/0; harness sec15+sec16; informe bloque-A123.
-Verde: suite-verde.log 91/0 (secs 0-16, codigo nuevo).
-Rojo: suite-roja15.log 86/5 (las 5 en sec15, predichas); awk viejo
-  pp_med=300/tg_med=10 vs bien 20/2000; pipe pierde rc (0 vs 7).
-Commits sgte: spike, pruebas-stub, correr, prep, lib, test-cache,
-  gitignore, ESTADO, informe, entorno-v2, plan (uno por fichero).
-Bloqueado: T1 sin Wi-Fi (solo movil) -> A4 en espera; T3 modulo -> F4.
-Datos: /data/adb/nagent NO existe (solo logs/ vacio de un arranque
-  accidental fail-closed exit 3). Wi-Fi al aparecer: prep+cadena.
-Siguiente: vigilante corriendo (PID 9988) -> al Wi-Fi: prep+cadena ->
-  B1 repo -> esqueleto C.
-Preparation: wake_lock OK sin espacios; wake_lock_timeout NO existe.
-Umbrales: 8/60 propuestos (re-calibrar con medir-reposo en sistema nuevo).
+Bloque actual: A1-A3 aceptados; B1+C esqueletos listos. A4 en espera T1.
+Hecho: agentd/ 13 ficheros (Go estatico, test unitario incluido);
+  module/ plantilla F (sin autostart/post-fs-data); 4 workflows;
+  eval 62 casos (50+12); app esqueleto targetSdk34; rollback+F4.
+Verde: lab 91/0 (A); test-cache 10/0 (A3). Go SIN compilar aqui
+  (sin toolchain; compila en Actions: go vet+test primero).
+Bloqueado: T1 sin Wi-Fi (A4/prep/cadena); sin gh en chroot (push
+  repo y workflows); F4 espera zip+linea Leonardo (T3).
+Datos: /data/adb/nagent NO existe. Vigilante PID 9988 sondeando.
+Siguiente: D herramientas MCP -> E app completa -> F1 zip ->
+  cadena A4-A6 al Wi-Fi -> A7 decision -> G acceptance.
+Umbrales: 8/60 propuestos (re-calibrar con medir-reposo en v2).
+Informes: docs/informes/bloque-A123.md (este turno: pendiente bloque-BC).
