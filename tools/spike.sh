@@ -111,7 +111,7 @@ qwen2.5-3b-instruct-q4_k_m.gguf
 #   · es el de cuantizacion q4_0, la misma de las dos celdas de referencia del enunciado.
 # Si hay que comparar cuantizaciones, se pasa otro con PREFIX_MODEL; si hay que comparar tamanos,
 # el de 3B. Se puede cambiar sin tocar el script.
-PREFIX_MODEL=qwen2.5-1.5b-instruct-q4_0.gguf
+PREFIX_MODEL=${PREFIX_MODEL:-qwen2.5-1.5b-instruct-q4_0.gguf}
 # Segunda pasada de prefijo, sobre el 3B que gane el bench (encargo 5). Parametrizable para poder
 # fijarlo a mano si el parseo no sirve, con la palabra "auto" para que lo elija de los resultados.
 PREFIX_MODEL_3B=${PREFIX_MODEL_3B:-auto}
@@ -139,11 +139,14 @@ SHA_3b_k_m=626b4a6678b86442240e33df819e00132d3ba7dddfe1cdc4fbb18e0a9615c62d
 
 DRY=0
 SMOKE=0
+SMOKE_SERVER=0
 case "${1:-}" in
   --dry-run) DRY=1 ;;
   --smoke)   SMOKE=1 ;;
+  --smoke-server) SMOKE_SERVER=1 ;;
   --help|-h) sed -n '2,80p' "$0"; exit 0 ;;
 esac
+if [ "$SMOKE_SERVER" -eq 1 ]; then TTFT_REQS=3; fi
 
 # --------------------------------------------------------------- utilidades
 
@@ -799,6 +802,10 @@ if [ "$DRY" -eq 1 ]; then
     echo "  A  bench $(celda_tag "$SMOKE_MODEL" 3)   (llama-bench)"
     exit 0
   fi
+  if [ "$SMOKE_SERVER" -eq 1 ]; then
+    echo "SMOKE-SERVER: solo ttft $(celda_tag "$SMOKE_MODEL" prefix), 3 hilos, TTFT_REQS=3 (sin bench/sostenido/3B)"
+    exit 0
+  fi
   echo "celdas:"
   for m in $MODELS; do
     echo "  A  bench $(celda_tag "$m" 3)   afin=$AFF_3($AFF_3_LIST) hilos=3"
@@ -845,6 +852,15 @@ if [ "$SMOKE" -eq 1 ]; then
   revisar_vacios || true
   copiar_al_repo
   say "=== SMOKE fin. Contaminadas: $CONTAMINATED  Ruidosas: $RUIDOSAS ==="
+  exit 0
+fi
+
+if [ "$SMOKE_SERVER" -eq 1 ]; then
+  say "--- SMOKE-SERVER: solo $(celda_tag "$SMOKE_MODEL" prefix)"
+  run_prefix_cache "$SMOKE_MODEL"
+  revisar_vacios || true
+  copiar_al_repo
+  say "=== SMOKE-SERVER fin. Contaminadas: $CONTAMINATED  Ruidosas: $RUIDOSAS ==="
   exit 0
 fi
 
