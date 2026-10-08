@@ -16,10 +16,17 @@
 #   - el prechequeo de espacio no descuenta lo ya instalado (con 100+ GB libres sobra).
 set -eu
 
-NS="nsenter -t 1 -m --"
+NS=${NAGENT_NS:-"nsenter -t 1 -m --"}
 DEV=${NAGENT_DEV:-/data/adb/nagent}
 BIN=$DEV/bin
 MOD=$DEV/models
+# A3: cache verificada en /sdcard (sobrevive al downgrade; ver punto 7 del plan).
+# Nunca evita el tripwire de red: solo evita bytes ya verificados.
+CACHE=${NAGENT_CACHE:-/sdcard/projects/nagent/cache}
+case "$0" in */*) LIBDIR=${0%/*} ;; *) LIBDIR=. ;; esac
+CACHELIB=${NAGENT_LIB:-$LIBDIR/prep-cache-lib.sh}
+[ -r "$CACHELIB" ] || { echo "[?] FALLO falta lib de cache: $CACHELIB" >&2; exit 1; }
+. "$CACHELIB"
 MANIFIESTO=/sdcard/projects/nagent/docs/manifest-sha256.md
 
 TARBALL=llama-b11146-bin-android-arm64.tar.gz
@@ -90,6 +97,16 @@ bajar() { # $1 fichero, $2 dir destino, $3 modo
     say "$f ya esta correcto, se omite"
     return 0
   fi
+  # A3: intento desde cache (verificada tamano+sha en ambos lados). La red ni se toca.
+  if [ -e "$CACHE/$f" ]; then
+    if traer_de_cache "$f" "$final" "$bytes" "$sha"; then
+      $NS chmod "$modo" "$final" || die "chmod de $f (desde cache)"
+      say "OK $f ($bytes B, desde cache, sha verificado)"
+      return 0
+    fi
+    say "cache de $f no valida, se borra y descarga"
+    rm -f "$CACHE/$f" || die "no se puede borrar cache corrupta de $f"
+  fi
   $NS rm -f "$part" || die "no se puede limpiar $part"
   # Anti-colgado: corta si baja de 50 KiB/s durante 60 s; 3 reintentos (transitorios).
   $NS curl -fSL --retry 3 --retry-delay 5 --connect-timeout 30 --speed-time 60 --speed-limit 51200 -o "$part" "$u" \
@@ -107,6 +124,7 @@ bajar() { # $1 fichero, $2 dir destino, $3 modo
   $NS mv "$part" "$final" || die "mv atomico de $f"
   $NS chmod "$modo" "$final" || die "chmod de $f"
   $NS test ! -L "$final" || die "$final es un symlink"
+  guardar_en_cache "$final" "$f" "$bytes" "$sha" || say "aviso: no se pudo poblar cache de $f"
   say "OK $f ($bytes B, sha verificado)"
 }
 
