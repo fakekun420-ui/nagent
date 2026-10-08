@@ -1,0 +1,6 @@
+id=nagent
+name=nagent (asistente local POCO F3)
+version=v0.1.0
+versionCode=100
+author=Leonardo
+description=agentd + llama-server en /data/adb/nagent. Sin autostart en primera instalacion. SDK>=34, alioth/arm64.
