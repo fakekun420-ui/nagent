@@ -1,0 +1,55 @@
+name: package-module
+on:
+  push:
+    branches: [main]
+    paths: ["module/**", ".github/workflows/package-module.yml"]
+  workflow_dispatch:
+    inputs:
+      agentd_run_id:
+        description: "run-id de build-agentd (vacio = solo plantilla)"
+        required: false
+jobs:
+  package:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: traer agentd (si se indico run-id)
+        if: inputs.agentd_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_ID: ${{ inputs.agentd_run_id }}
+        run: |
+          set -eu
+          gh run download "$INPUT_ID" -n agentd-linux-arm64 -D /tmp/agentd
+          mkdir -p module/bin
+          cp /tmp/agentd/agentd-linux-arm64 module/bin/agentd
+          chmod 755 module/bin/agentd
+      - name: validacion F1 (falla si aparece lo prohibido)
+        run: |
+          set -eu
+          test -f module/module.prop
+          test -f module/customize.sh
+          test -f module/service.sh
+          test -f module/uninstall.sh
+          if [ -e module/post-fs-data.sh ] || [ -e module/sepolicy.rule ]; then
+            echo "FALLO: post-fs-data.sh o sepolicy.rule presentes"
+            exit 1
+          fi
+          grep -q '^id=nagent$' module/module.prop
+          grep -q '^version=v0.1.0$' module/module.prop
+          dash -n module/customize.sh
+          dash -n module/service.sh
+          dash -n module/uninstall.sh
+          grep -rPn '[^\x00-\x7F]' module/*.sh && { echo "FALLO: no-ASCII en sh"; exit 1; } || true
+      - run: |
+          set -eu
+          cd module
+          zip -r -9 ../nagent-module-v0.1.0.zip . -x '*.git*'
+          cd ..
+          sha256sum nagent-module-v0.1.0.zip | tee nagent-module-v0.1.0.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nagent-module
+          path: |
+            nagent-module-v0.1.0.zip
+            nagent-module-v0.1.0.zip.sha256
