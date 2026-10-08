@@ -10,6 +10,7 @@ Commits sgte: spike, pruebas-stub, correr, prep, lib, test-cache,
 Bloqueado: T1 sin Wi-Fi (solo movil) -> A4 en espera; T3 modulo -> F4.
 Datos: /data/adb/nagent NO existe (solo logs/ vacio de un arranque
   accidental fail-closed exit 3). Wi-Fi al aparecer: prep+cadena.
-Siguiente: commits -> lanzar vigilante -> B1 repo -> esqueleto C.
+Siguiente: vigilante corriendo (PID 9988) -> al Wi-Fi: prep+cadena ->
+  B1 repo -> esqueleto C.
 Preparation: wake_lock OK sin espacios; wake_lock_timeout NO existe.
 Umbrales: 8/60 propuestos (re-calibrar con medir-reposo en sistema nuevo).
