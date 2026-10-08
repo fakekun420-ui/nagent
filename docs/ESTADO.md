@@ -1,5 +1,5 @@
 # ESTADO nagent (max 25 lineas) - 2026-10-08
-Bloque actual: D+E esqueletos listos. Descarga 6.3 GB en curso (movil).
+Bloque actual: D+E esqueletos listos. Descarga PAUSADA por orden (espera confirmacion).
 Hecho: prep opt-in NAGENT_ALLOW_METERED=1 (lab 2/0, red real AVISO ok);
   descarga lanzada .lab/prep-movil.log (~190kB/s); agentd MCP (rpc+5
   grupos+test, sin shell); app E (manifest, voz, TTS, notif opt-in).
