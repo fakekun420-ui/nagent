@@ -12,3 +12,7 @@ models/
 # Resultados del spike: pesan y se regeneran
 docs/spike-datos/
 *.raw.json
+# Cache verificada de prep.sh (A3): sobrevive al downgrade, se regenera sola
+cache/
+# Laboratorio del arnes de stubs (nunca en /tmp: el guard lo rechaza)
+.lab/
