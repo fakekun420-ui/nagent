@@ -37,6 +37,11 @@ func main() {
 	if err := VerificarSHA(cfg.Binarios.Modelo, cfg.Binarios.ShaModelo); err != nil {
 		log.Fatalf("integridad: %v", err)
 	}
+	if mem, err := AbrirMemoria(cfg.Memoria.UserDB, cfg.Memoria.AgentDB); err != nil {
+		log.Printf("memoria: %v (leer_memoria/remember no disponibles)", err)
+	} else {
+		memGlobal = mem
+	}
 	srv := NuevoServidor(cfg)
 	log.Fatal(srv.Escuchar())
 }
