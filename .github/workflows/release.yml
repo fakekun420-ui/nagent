@@ -1,0 +1,38 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "tag (ej. v0.1.0)"
+        required: true
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: descargar artefactos (un workflow cada vez)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IN_TAG: ${{ inputs.tag }}
+        run: |
+          set -eu
+          TAG="${GITHUB_REF_NAME:-$IN_TAG}"
+          echo "tag=$TAG"
+          mkdir -p dist
+          for wf in build-agentd build-app package-module; do
+            RID=$(gh run list --workflow "$wf.yml" --status success -L 1 --json databaseId -q '.[0].databaseId')
+            gh run download "$RID" -D "dist/$wf"
+          done
+          ( cd dist && sha256sum $(find . -type f) | tee SHA256SUMS )
+      - name: crear release con artefactos+sha
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IN_TAG: ${{ inputs.tag }}
+        run: |
+          set -eu
+          TAG="${GITHUB_REF_NAME:-$IN_TAG}"
+          gh release create "$TAG" --title "$TAG" --notes "v0.1.0 instalada y validada en POCO F3 (alioth). Ver docs/acceptance-report.md." dist/*/* dist/SHA256SUMS
