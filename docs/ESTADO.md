@@ -9,7 +9,8 @@ Hecho-extra: keystore B4 fuera del repo (600, ~/.config/nagent);
   F1 zip pendiente de `zip` (dpkg ocupado); Go revisado a mano.
 Bloqueado: A4-A6 hasta fin descarga (horas); gh SIN auth (push+secrets
   esperan `gh auth login`); F4 espera zip+linea Leonardo (T3).
-Datos: /data/adb/nagent recreandose por prep (tarball primero).
+Datos: tarball OK+sha (72 MB), bins con LD=$BIN (re-verificado
+  en A14); modelo 1/4 descargando (~120kB/s, horas en total).
 Siguiente: al fin descarga -> verificar -> baseline -> smoke ->
   smoke-server -> completa -> A7 -> F1/F3 -> G.
 Informes: bloque-A123.md; este: pendiente bloque-DE al cerrar D/E tests.
