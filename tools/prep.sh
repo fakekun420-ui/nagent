@@ -65,9 +65,27 @@ vuelca_red() { # $1 motivo
 # Punto 1 (autorizacion): solo Wi-Fi no medida, demostrado, no supuesto. Falla cerrado:
 # sin agente Wi-Fi CONECTADO, sin red por defecto Wi-Fi, con la interfaz en el conjunto metered
 # del SO, o sin poder demostrarlo (salidas vacias), aborta ANTES de crear nada. Nada movil.
+# Opt-in manual NAGENT_ALLOW_METERED=1 (solo entorno manual, nunca exportado en
+# scripts): acepta red movil medida si es demostrable (default existente, agente
+# CONECTADO, interfaz y conjunto metered legibles). Sin la var, todo igual.
 red_no_medida() {
   con=$($NS dumpsys connectivity 2>/dev/null || true)
   [ -n "$con" ] || die "sin salida de dumpsys connectivity (red no demostrable)"
+  if [ "${NAGENT_ALLOW_METERED:-}" = "1" ]; then
+    def=$(printf '%s' "$con" | grep -o 'Active default network: [0-9]*' | awk '{print $4}' | head -n 1 || true)
+    [ -n "$def" ] || { vuelca_red "sin red por defecto"; die "sin red por defecto (red no demostrable)"; }
+    ag=$(printf '%s' "$con" | grep "network{$def}" | head -n 1 || true)
+    [ -n "$ag" ] || { vuelca_red "agente por defecto ilegible"; die "agente de la red por defecto ilegible"; }
+    printf '%s' "$ag" | grep -q 'CONNECTED' \
+      || { vuelca_red "red no conectada"; die "la red por defecto ($def) no esta CONECTADA"; }
+    iface=$(printf '%s' "$ag" | grep -o 'InterfaceName: [^ ]*' | awk '{print $2}' | head -n 1 || true)
+    [ -n "$iface" ] || { vuelca_red "interfaz ilegible"; die "interfaz de la red por defecto ilegible"; }
+    npol=$($NS dumpsys netpolicy 2>/dev/null || true)
+    met=$(printf '%s' "$npol" | grep -o 'Metered ifaces: {[^}]*}' | head -n 1 || true)
+    [ -n "$met" ] || { vuelca_red "conjunto metered ilegible"; die "conjunto metered ilegible (red no demostrable)"; }
+    say "AVISO: red medida autorizada por usuario ($def/$iface)"
+    return 0
+  fi
   [ "$(printf '%s' "$con" | grep -c 'ni{WIFI[A-Za-z0-9_ ."-]* CONNECTED' || true)" -gt 0 ] \
     || die "sin Wi-Fi CONECTADO (solo hay movil o nada)"
   def=$(printf '%s' "$con" | grep -o 'Active default network: [0-9]*' | awk '{print $4}' | head -n 1 || true)
