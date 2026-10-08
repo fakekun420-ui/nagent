@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -128,7 +129,14 @@ func Despachar(r *http.Request) string {
 		Nombre string          `json:"nombre"`
 		Args   json.RawMessage `json:"args"`
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 64*1024)).Decode(&ll); err != nil {
+	b, err := io.ReadAll(io.LimitReader(r.Body, 65*1024))
+	if err != nil {
+		return `{"error":"peticion ilegible"}`
+	}
+	if len(b) >= 65*1024 {
+		return `{"error":"peticion demasiado grande"}`
+	}
+	if err := json.Unmarshal(b, &ll); err != nil {
 		return `{"error":"peticion ilegible"}`
 	}
 	h, ok := Registro[ll.Nombre]
