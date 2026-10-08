@@ -1,0 +1,23 @@
+# config.yaml de ejemplo para agentd (las rutas reales las pone customize.sh).
+dns:
+  servidores: ["8.8.8.8", "1.1.1.1"]
+  doh: "https://dns.google/resolve"
+auth:
+  token_path: "/data/adb/nagent/agentd.token"
+router:
+  nivel_defecto: 2
+  remoto_url: ""
+ciclo:
+  inactividad_min: 5
+  binario: "/data/adb/nagent/bin/llama-server"
+  puerto: 8080
+  ctx_size: 2048
+  afinidad: "70"
+binarios:
+  llama_server: "/data/adb/nagent/bin/llama-server"
+  sha_llama: "PONER-SHA-DEL-MANIFIESTO"
+  modelo: "/data/adb/nagent/models/qwen2.5-1.5b-instruct-q4_0.gguf"
+  sha_modelo: "PONER-SHA-DEL-MANIFIESTO"
+memoria:
+  user_db: "/data/adb/nagent/user.db"
+  agent_db: "/data/adb/nagent/agent.db"
