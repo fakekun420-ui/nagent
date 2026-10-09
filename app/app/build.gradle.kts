@@ -14,10 +14,12 @@ android {
     }
     signingConfigs {
         create("proyecto") {
-            storeFile = file(System.getProperty("nagentKs") ?: "nagent.keystore")
-            storePassword = System.getProperty("nagentKsPass")
-            keyAlias = System.getProperty("nagentKeyAlias")
-            keyPassword = System.getProperty("nagentKeyPass")
+            // -P de Gradle o -D del sistema (CI usa -P; local puede usar -D).
+            fun prop(n: String): String? = (project.findProperty(n) as? String) ?: System.getProperty(n)
+            storeFile = file(prop("nagentKs") ?: "nagent.keystore")
+            storePassword = prop("nagentKsPass")
+            keyAlias = prop("nagentKeyAlias")
+            keyPassword = prop("nagentKeyPass")
         }
     }
     buildTypes {
