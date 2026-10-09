@@ -150,6 +150,6 @@ func Despachar(r *http.Request) string {
 	if err != nil {
 		return fmt.Sprintf(`{"error":%q}`, err.Error())
 	}
-	b, _ := json.Marshal(map[string]any{"ok": res})
-	return string(b)
+	b2, _ := json.Marshal(map[string]any{"ok": res})
+	return string(b2)
 }
