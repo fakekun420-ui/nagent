@@ -1,13 +1,12 @@
 # ESTADO nagent (max 25 lineas) - 2026-10-09
-Bloque actual: A6 corrida completa 5 h (PID 18609, lanzada 06:36).
-Hecho: A5 VERDE (3a OK, smoke pp~65 tg~19-22, 1.5B Q4_0 3hilos);
-  B1 repo+Secrets; CI 3/4 (agentd, app APK 2.5 MB, module F1);
-  Go local vet+test verdes; lab 91/0; cache 10/0; metered 2/0.
-Smoke RUIDOSA (carga 4-6 por trabajo CI concurrente); A6 dara limpio.
-Condiciones A6: AC 94%, battC 39, gates 8/60 (linea base dentro).
-En curso: A6 sola 5 h. NO TOCAR el telefono hasta su resumen.
-Bloqueado: A7 tras A6; F4 espera linea Leonardo (T3).
-Datos: /data/adb/nagent completo; cache repo 6.0 GB (ignorada).
-Siguiente: resumen-completo -> A7 decision -> F3/F4/F5 -> G.
-Informes: bloque-A123.md; LIMITACIONES.md; pendiente bloque-DE.
-Nota: firma APK v2 asumida (verificar con adb install en F5).
+Bloque actual: A6+A7 VERDES. Siguiente: F3 (agentd manual).
+Hecho: A6 rc=0 (8 celdas x3; 1.5B t4 pp87/tg21.7; 3B tg~8-10);
+  A7 decide N0+N2, N1 condicional (falta TTFT+RAM+precision);
+  .ponytail.md creado (sec-8 global); B1+Secrets; CI 3/4 verde.
+Huecos: TTFT sin-datos; RAM bench ausente; smoke-server sin correr;
+  eval 62 casos sin ejecutar; firma APK v2 por verificar en F5.
+En curso: nada pesado. Telefono libre para F3 (prueba manual).
+Bloqueado: F4 espera linea Leonardo (T3).
+Datos: /data/adb/nagent completo; resumen-completo copiado con sha.
+Siguiente: F3 agentd a mano -> C/D -> precision TTFT -> F4 -> G.
+Informes: bloque-A123.md; LIMITACIONES.md; DECISION-ARQUITECTURA.md.
