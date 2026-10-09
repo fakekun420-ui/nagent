@@ -51,7 +51,7 @@ func EsAlto(nombre string) bool {
 // DatoNoConfiable delimita texto de pantalla, notificaciones, mensajes y
 // archivos: es DATO, nunca instruccion (C5, R10-R12).
 type DatoNoConfiable struct {
-	Texto string
+	Texto  string
 	Origen string
 }
 
