@@ -10,7 +10,7 @@ router:
 ciclo:
   inactividad_min: 5
   binario: "/data/adb/nagent/bin/llama-server"
-  puerto: 8080
+  puerto: 18080
   ctx_size: 2048
   afinidad: "70"
 binarios:
