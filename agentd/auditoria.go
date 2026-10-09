@@ -29,6 +29,12 @@ type Auditor struct {
 	maxBytes int64
 }
 
+// auditorGlobal es el auditor del servidor (nil = sin auditoria, no falla).
+var auditorGlobal *Auditor
+
+// FijarAuditor instala el auditor global (nil lo desactiva).
+func FijarAuditor(a *Auditor) { auditorGlobal = a }
+
 // NuevoAuditor crea el auditor sobre dir (0600 en ficheros).
 func NuevoAuditor(dir string, maxBytes int64) *Auditor {
 	if maxBytes <= 0 {
