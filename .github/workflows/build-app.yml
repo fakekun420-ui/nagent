@@ -38,10 +38,10 @@ jobs:
           gradle --no-daemon assembleRelease \
             -PnagentKs="$KS" -PnagentKsPass="$KS_PASS" \
             -PnagentKeyAlias="$KEY_ALIAS" -PnagentKeyPass="$KEY_PASS"
-      - run: sha256sum app/build/outputs/apk/release/*.apk | tee app-apk.sha256
+      - run: sha256sum app/app/build/outputs/apk/release/*.apk | tee app-apk.sha256
       - uses: actions/upload-artifact@v4
         with:
           name: nagent-app
           path: |
-            app/build/outputs/apk/release/*.apk
+            app/app/build/outputs/apk/release/*.apk
             app-apk.sha256
