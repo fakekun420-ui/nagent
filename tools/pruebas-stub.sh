@@ -252,8 +252,8 @@ control_neg "8-pid"
 
 echo
 echo "=== 9) llama-server con -np 1 y -c explicito ==="
-# Rojo: sin --np 1 el default auto decide slots y la medida de prefijo se contamina.
-cont "el arranque fija -np 1" "$src" "--np 1"
+# Rojo: sin -np 1 el default auto decide slots y la medida de prefijo se contamina.
+cont "el arranque fija -np 1" "$src" "-np 1"
 cont "el contexto se pasa por variable, no de serie" "$src" '--ctx-size $SRV_CTX'
 n=$(grep -c 'np.*default: -1' "$ANDROID_LOGS"/server-help.txt 2>/dev/null || echo 0)
 if [ "$n" -ge 1 ]; then ok "el --help del laboratorio declara que el default de -np es -1 (auto)"; else ko "default de -np leido del --help" ">=1" "$n"; fi
