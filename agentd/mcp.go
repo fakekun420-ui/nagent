@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 )
 
 // PeticionRPC es un mensaje JSON-RPC 2.0 (Bloque D).
@@ -36,35 +37,70 @@ func respErr(id any, c int, m string) RespuestaRPC {
 }
 
 // DespacharRPC atiende initialize/tools/list/tools/call (D).
-func DespacharRPC(p PeticionRPC) RespuestaRPC {
+// Registra tools/call en la auditoria global (C6); sin auditor no falla.
+func DespacharRPC(p PeticionRPC) (out RespuestaRPC) {
+	t0 := time.Now()
+	ev := Evento{Origen: "loopback", Decision: "denegada", Resultado: "metodo desconocido"}
+	argsJSON := p.Params
+	defer func() {
+		ev.Latencia = time.Since(t0).Milliseconds()
+		ev.ArgsHash = hashArgs(argsJSON)
+		if auditorGlobal != nil {
+			_ = auditorGlobal.Registrar(ev)
+		}
+	}()
 	switch p.Metodo {
 	case "initialize":
-		return respOK(p.ID, map[string]any{"nombre": "nagent", "version": "0.1.0", "protocolo": "2.0"})
+		ev.Decision = "ejecutada"
+		ev.Resultado = "ok"
+		out = respOK(p.ID, map[string]any{"nombre": "nagent", "version": "0.1.0", "protocolo": "2.0"})
 	case "tools/list":
-		return respOK(p.ID, CatalogoMCP())
+		ev.Decision = "ejecutada"
+		ev.Resultado = "ok"
+		out = respOK(p.ID, CatalogoMCP())
 	case "tools/call":
 		var ll struct {
 			Nombre string          `json:"nombre"`
 			Args   json.RawMessage `json:"args"`
 		}
 		if err := json.Unmarshal(p.Params, &ll); err != nil {
-			return respErr(p.ID, -32700, "params ilegibles")
+			ev.Resultado = "params ilegibles"
+			out = respErr(p.ID, -32700, "params ilegibles")
+			return
 		}
+		ev.Tool = ll.Nombre
+		argsJSON = ll.Args
 		h, ok := Registro[ll.Nombre]
 		if !ok {
-			return respErr(p.ID, -32601, "unknown_tool")
+			ev.Resultado = "unknown_tool"
+			out = respErr(p.ID, -32601, "unknown_tool")
+			return
 		}
+		ev.Riesgo = h.Riesgo.String()
 		if RequiereConfirmacion(h.Riesgo) {
-			return respOK(p.ID, map[string]any{"estado": "pendiente", "nota": "riesgo alto: confirmar en la app"})
+			ev.Decision = "pendiente"
+			ev.Resultado = "pendiente"
+			out = respOK(p.ID, map[string]any{"estado": "pendiente", "nota": "riesgo alto: confirmar en la app"})
+			return
 		}
 		res, err := h.Ejecuta(ll.Args)
 		if err != nil {
-			return respErr(p.ID, -32000, err.Error())
+			ev.Decision = "ejecutada"
+			msg := err.Error()
+			if len(msg) > 120 {
+				msg = msg[:120]
+			}
+			ev.Resultado = "error: " + msg
+			out = respErr(p.ID, -32000, err.Error())
+			return
 		}
-		return respOK(p.ID, map[string]any{"ok": res})
+		ev.Decision = "ejecutada"
+		ev.Resultado = "ok"
+		out = respOK(p.ID, map[string]any{"ok": res})
 	default:
-		return respErr(p.ID, -32601, "metodo desconocido: "+p.Metodo)
+		out = respErr(p.ID, -32601, "metodo desconocido: "+p.Metodo)
 	}
+	return
 }
 
 // CatalogoMCP serializa el registro con riesgo (R6).
