@@ -17,6 +17,8 @@ jobs:
           java-version: "17"
           cache: gradle
       - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.9"
       - name: keystore desde Secrets (B4, nunca en repo)
         env:
           KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -33,7 +35,7 @@ jobs:
           KEY_PASS: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -eu
-          ./gradlew --no-daemon assembleRelease \
+          gradle --no-daemon assembleRelease \
             -PnagentKs="$KS" -PnagentKsPass="$KS_PASS" \
             -PnagentKeyAlias="$KEY_ALIAS" -PnagentKeyPass="$KEY_PASS"
       - run: sha256sum app/build/outputs/apk/release/*.apk | tee app-apk.sha256
