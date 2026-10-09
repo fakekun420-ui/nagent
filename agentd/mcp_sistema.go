@@ -21,7 +21,7 @@ var allowSettings = map[string]bool{
 func RegistrarSistema() {
 	Registro["estado_sistema"] = Herramienta{
 		Nombre: "estado_sistema", Riesgo: Bajo,
-		Schema: `{"type":"object","properties":{},"additionalProperties":false}`,
+		Schema:  `{"type":"object","properties":{},"additionalProperties":false}`,
 		Timeout: 30 * time.Second, MaxOut: 64 * 1024,
 		Ejecuta: func(_ json.RawMessage) (any, error) {
 			out, err := runCapped(30*time.Second, 64*1024, "dumpsys", "power")
@@ -33,7 +33,7 @@ func RegistrarSistema() {
 	}
 	Registro["ajuste_get"] = Herramienta{
 		Nombre: "ajuste_get", Riesgo: Bajo,
-		Schema: `{"type":"object","properties":{"ns":{"type":"string","enum":["system","secure","global"]},"key":{"type":"string"}},"required":["ns","key"],"additionalProperties":false}`,
+		Schema:  `{"type":"object","properties":{"ns":{"type":"string","enum":["system","secure","global"]},"key":{"type":"string"}},"required":["ns","key"],"additionalProperties":false}`,
 		Timeout: 30 * time.Second, MaxOut: 64 * 1024,
 		Ejecuta: func(raw json.RawMessage) (any, error) {
 			var a struct {
@@ -55,7 +55,7 @@ func RegistrarSistema() {
 	}
 	Registro["brillo_set"] = Herramienta{
 		Nombre: "brillo_set", Riesgo: Medio,
-		Schema: `{"type":"object","properties":{"valor":{"type":"integer","minimum":0,"maximum":255}},"required":["valor"],"additionalProperties":false}`,
+		Schema:  `{"type":"object","properties":{"valor":{"type":"integer","minimum":0,"maximum":255}},"required":["valor"],"additionalProperties":false}`,
 		Timeout: 30 * time.Second, MaxOut: 4096,
 		Ejecuta: func(raw json.RawMessage) (any, error) {
 			var a struct {
@@ -79,7 +79,7 @@ func RegistrarSistema() {
 	}
 	Registro["volumen_tecla"] = Herramienta{
 		Nombre: "volumen_tecla", Riesgo: Medio,
-		Schema: `{"type":"object","properties":{"dir":{"type":"string","enum":["subir","bajar"]},"pasos":{"type":"integer","minimum":1,"maximum":5}},"required":["dir"],"additionalProperties":false}`,
+		Schema:  `{"type":"object","properties":{"dir":{"type":"string","enum":["subir","bajar"]},"pasos":{"type":"integer","minimum":1,"maximum":5}},"required":["dir"],"additionalProperties":false}`,
 		Timeout: 30 * time.Second, MaxOut: 4096,
 		Ejecuta: func(raw json.RawMessage) (any, error) {
 			var a struct {
