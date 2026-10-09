@@ -162,7 +162,7 @@ Desarrolla en el repo, compila en Actions, prueba en el dispositivo.
 6. **Auditoría:** JSONL con rotación en `/data/adb/nagent/logs/` (herramienta, argumentos, resultado, origen). Timeouts, límite de salida, cancelación, rate limiting.
 7. **Memoria** en dos dominios (`user.db`, `agent.db`) con SQLite en Go puro (`modernc.org/sqlite`, porque `CGO_ENABLED=0`).
 8. **Router de tres niveles** según A7 (reglas → LLM local con prefijo cacheado → remoto). Salida estructurada con JSON schema o GBNF. Prompt de sistema **corto y estable** (lo variable al final).
-9. **Ciclo de vida de `llama-server`:** carga bajo demanda, descarga tras N min de inactividad (default 5), `--np 1`, `-c` explícito, `exec taskset` con PID/`comm` comprobados, `oom_score_adj` con valores medidos. Mide RAM en reposo con el modelo descargado.
+9. **Ciclo de vida de `llama-server`:** carga bajo demanda, descarga tras N min de inactividad (default 5), `-np 1`, `-c` explícito, `exec taskset` con PID/`comm` comprobados, `oom_score_adj` con valores medidos. Mide RAM en reposo con el modelo descargado.
 10. **Prueba de integridad al arrancar:** `agentd` verifica el sha de `llama-server` y del modelo antes de lanzarlos (la carpeta `/data/adb/nagent` es escribible por el flujo del proyecto).
 
 **Set de evaluación:** `tools/eval/cases.jsonl` con ≥ 50 casos (frase en español → llamada JSON esperada), **más** ≥ 10 casos negativos (inyección de prompt, órdenes ambiguas, riesgo alto sin confirmación). Script que mide precisión por modelo y por nivel. Sub-agente `prompt-engineer` redacta los casos; `reality-checker` los contrasta con las herramientas reales.
