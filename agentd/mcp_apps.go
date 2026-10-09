@@ -11,7 +11,7 @@ import (
 func RegistrarApps() {
 	Registro["lanzar_app"] = Herramienta{
 		Nombre: "lanzar_app", Riesgo: Medio,
-		Schema: `{"type":"object","properties":{"paquete":{"type":"string"},"actividad":{"type":"string"}},"required":["paquete"],"additionalProperties":false}`,
+		Schema:  `{"type":"object","properties":{"paquete":{"type":"string"},"actividad":{"type":"string"}},"required":["paquete"],"additionalProperties":false}`,
 		Timeout: 30 * time.Second, MaxOut: 64 * 1024,
 		Ejecuta: func(raw json.RawMessage) (any, error) {
 			var a struct {
@@ -40,7 +40,7 @@ func RegistrarApps() {
 	}
 	Registro["abrir_url"] = Herramienta{
 		Nombre: "abrir_url", Riesgo: Medio,
-		Schema: `{"type":"object","properties":{"url":{"type":"string"}},"required":["url"],"additionalProperties":false}`,
+		Schema:  `{"type":"object","properties":{"url":{"type":"string"}},"required":["url"],"additionalProperties":false}`,
 		Timeout: 30 * time.Second, MaxOut: 64 * 1024,
 		Ejecuta: func(raw json.RawMessage) (any, error) {
 			var a struct {
@@ -61,7 +61,7 @@ func RegistrarApps() {
 	}
 	Registro["ui_tecla"] = Herramienta{
 		Nombre: "ui_tecla", Riesgo: Medio,
-		Schema: `{"type":"object","properties":{"codigo":{"type":"string"}},"required":["codigo"],"additionalProperties":false}`,
+		Schema:  `{"type":"object","properties":{"codigo":{"type":"string"}},"required":["codigo"],"additionalProperties":false}`,
 		Timeout: 30 * time.Second, MaxOut: 4096,
 		Ejecuta: func(raw json.RawMessage) (any, error) {
 			var a struct {
