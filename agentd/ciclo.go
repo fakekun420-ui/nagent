@@ -43,7 +43,7 @@ func (c *Ciclo) Cargar(modelo string) error {
 		"-m", modelo,
 		"--port", fmt.Sprint(c.cfg.Ciclo.Puerto),
 		"-c", fmt.Sprint(c.cfg.Ciclo.CtxSize),
-		"--np", "1")
+		"-np", "1")
 	if err := c.cmd.Start(); err != nil {
 		c.cmd = nil
 		return fmt.Errorf("lanzar llama-server: %w", err)
