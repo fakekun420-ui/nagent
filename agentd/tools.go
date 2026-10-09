@@ -124,32 +124,65 @@ func ListaJSON() string {
 }
 
 // Despachar valida riesgo alto (siempre pendiente, R7) y ejecuta lo demas.
-func Despachar(r *http.Request) string {
+// Registra cada decision en la auditoria global (C6); sin auditor no falla.
+func Despachar(r *http.Request) (out string) {
+	t0 := time.Now()
+	ev := Evento{Origen: "loopback", Decision: "denegada", Resultado: "peticion ilegible"}
+	var argsJSON json.RawMessage
+	defer func() {
+		ev.Latencia = time.Since(t0).Milliseconds()
+		ev.ArgsHash = hashArgs(argsJSON)
+		if auditorGlobal != nil {
+			_ = auditorGlobal.Registrar(ev)
+		}
+	}()
 	var ll struct {
 		Nombre string          `json:"nombre"`
 		Args   json.RawMessage `json:"args"`
 	}
 	b, err := io.ReadAll(io.LimitReader(r.Body, 65*1024))
 	if err != nil {
-		return `{"error":"peticion ilegible"}`
+		out = `{"error":"peticion ilegible"}`
+		return
 	}
 	if len(b) >= 65*1024 {
-		return `{"error":"peticion demasiado grande"}`
+		ev.Resultado = "peticion demasiado grande"
+		out = `{"error":"peticion demasiado grande"}`
+		return
 	}
 	if err := json.Unmarshal(b, &ll); err != nil {
-		return `{"error":"peticion ilegible"}`
+		out = `{"error":"peticion ilegible"}`
+		return
 	}
+	ev.Tool = ll.Nombre
+	argsJSON = ll.Args
 	h, ok := Registro[ll.Nombre]
 	if !ok {
-		return `{"error":"unknown_tool"}`
+		ev.Resultado = "unknown_tool"
+		out = `{"error":"unknown_tool"}`
+		return
 	}
+	ev.Riesgo = h.Riesgo.String()
 	if RequiereConfirmacion(h.Riesgo) {
-		return `{"estado":"pendiente","nota":"riesgo alto: confirmar en la app"}`
+		ev.Decision = "pendiente"
+		ev.Resultado = "pendiente"
+		out = `{"estado":"pendiente","nota":"riesgo alto: confirmar en la app"}`
+		return
 	}
 	res, err := h.Ejecuta(ll.Args)
 	if err != nil {
-		return fmt.Sprintf(`{"error":%q}`, err.Error())
+		ev.Decision = "ejecutada"
+		msg := err.Error()
+		if len(msg) > 120 {
+			msg = msg[:120]
+		}
+		ev.Resultado = "error: " + msg
+		out = fmt.Sprintf(`{"error":%q}`, err.Error())
+		return
 	}
+	ev.Decision = "ejecutada"
+	ev.Resultado = "ok"
 	b2, _ := json.Marshal(map[string]any{"ok": res})
-	return string(b2)
+	out = string(b2)
+	return
 }
