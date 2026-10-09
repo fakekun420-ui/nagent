@@ -511,7 +511,7 @@ run_prefix_cache() { # $1 modelo (basename)
   # medido: es un requisito, no un dato. La medicion de "nsenter conserva el PID" fue de comando
   # directo, no de `sh -c`: no se extrapola. Si taskset hiciera fork, la guarda de comm lo
   # detecta (falla a seguro) y el smoke del laboratorio lo comprueba explicito (PID y comm).
-  $NS sh -c "export LD_LIBRARY_PATH=$BIN; exec taskset $AFF_3 $BIN/llama-server -m $MOD/$m --host 127.0.0.1 --port $SERVER_PORT --ctx-size $SRV_CTX --np 1 --cache-prompt --n-gpu-layers 0 > $srvlog 2>&1" &
+  $NS sh -c "export LD_LIBRARY_PATH=$BIN; exec taskset $AFF_3 $BIN/llama-server -m $MOD/$m --host 127.0.0.1 --port $SERVER_PORT --ctx-size $SRV_CTX -np 1 --cache-prompt --n-gpu-layers 0 > $srvlog 2>&1" &
   # MEDIDO: `nsenter` hace exec y CONSERVA el PID. Lanzado `nsenter -t 1 -m -- <cmd> &`, `$!` da un
   # PID que EXISTE en el namespace de Android y cuyo /proc/$PID/status se lee ahi con el comm ya
   # cambiado al del programa final. Por eso el PID se saca de lo que LANZAMOS y no de una busqueda
