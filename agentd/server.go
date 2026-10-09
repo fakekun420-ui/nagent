@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -44,6 +45,7 @@ func NuevoServidor(cfg Config) *Servidor {
 	RegistrarApps()
 	RegistrarComunicacion()
 	RegistrarArchivos()
+	FijarAuditor(NuevoAuditor(filepath.Join(filepath.Dir(cfg.Auth.TokenPath), "logs"), 10*1024*1024))
 	s.mux.Handle("/health", s.auth(http.HandlerFunc(s.salud)))
 	s.mux.Handle("/tools/list", s.auth(http.HandlerFunc(s.lista)))
 	s.mux.Handle("/tools/call", s.auth(http.HandlerFunc(s.llamar)))
