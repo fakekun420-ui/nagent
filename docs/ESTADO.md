@@ -2,10 +2,10 @@
 Bloque actual: A5 en pausa (watcher PID 11167 sondeando, sin Wi-Fi).
 Hecho: 3a diagnosticado (dry-run escribe su plan al log del watcher);
   fix commiteado (05f7814) + watcher relanzado; gofmt x7 (solo
-  alineacion); test-cache 10/0; test-metered 2/0; lab re-corriendo.
+  alineacion); test-cache 10/0; test-metered 2/0; lab 91/0 verde.
   D (MCP rpc+5 grupos+test) + E (manifest, voz, TTS, notif) listos.
-Verde: lab 91/0 (pendiente re-verificar); gh con auth OK; Go 1.22.2.
-En curso: lab local (fondo) + watcher solo. Telefono quieto.
+Verde: lab 91/0 RE-VERIFICADO hoy; gh con auth OK; Go 1.22.2.
+En curso: watcher solo. Telefono quieto.
 Bloqueado: A5-smoke hasta Wi-Fi; B1 push (red movil, no subir);
   F4 espera linea Leonardo (T3); zip F1 tras smoke (sin apt en movil).
 Datos: /data/adb/nagent completo (bins + 4 gguf con sha OK).
