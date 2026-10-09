@@ -18,9 +18,9 @@ type PeticionRPC struct {
 
 // RespuestaRPC es la respuesta JSON-RPC 2.0.
 type RespuestaRPC struct {
-	JSONRPC string `json:"jsonrpc"`
-	ID      any    `json:"id"`
-	Result  any    `json:"result,omitempty"`
+	JSONRPC string  `json:"jsonrpc"`
+	ID      any     `json:"id"`
+	Result  any     `json:"result,omitempty"`
 	Error   *ErrRPC `json:"error,omitempty"`
 }
 
