@@ -40,7 +40,7 @@ func resolverRuta(ruta string) (string, error) {
 func RegistrarArchivos() {
 	Registro["archivos_listar"] = Herramienta{
 		Nombre: "archivos_listar", Riesgo: Bajo,
-		Schema: `{"type":"object","properties":{"ruta":{"type":"string"},"limite":{"type":"integer","minimum":1,"maximum":200}},"required":["ruta"],"additionalProperties":false}`,
+		Schema:  `{"type":"object","properties":{"ruta":{"type":"string"},"limite":{"type":"integer","minimum":1,"maximum":200}},"required":["ruta"],"additionalProperties":false}`,
 		Timeout: 30 * time.Second, MaxOut: 64 * 1024,
 		Ejecuta: func(raw json.RawMessage) (any, error) {
 			var a struct {
@@ -73,7 +73,7 @@ func RegistrarArchivos() {
 	}
 	Registro["archivos_leer"] = Herramienta{
 		Nombre: "archivos_leer", Riesgo: Bajo,
-		Schema: `{"type":"object","properties":{"ruta":{"type":"string"},"max_bytes":{"type":"integer","minimum":1,"maximum":262144}},"required":["ruta"],"additionalProperties":false}`,
+		Schema:  `{"type":"object","properties":{"ruta":{"type":"string"},"max_bytes":{"type":"integer","minimum":1,"maximum":262144}},"required":["ruta"],"additionalProperties":false}`,
 		Timeout: 30 * time.Second, MaxOut: 64 * 1024,
 		Ejecuta: func(raw json.RawMessage) (any, error) {
 			var a struct {
@@ -103,7 +103,7 @@ func RegistrarArchivos() {
 	}
 	Registro["archivos_escribir"] = Herramienta{
 		Nombre: "archivos_escribir", Riesgo: Medio,
-		Schema: `{"type":"object","properties":{"ruta":{"type":"string"},"contenido":{"type":"string"}},"required":["ruta","contenido"],"additionalProperties":false}`,
+		Schema:  `{"type":"object","properties":{"ruta":{"type":"string"},"contenido":{"type":"string"}},"required":["ruta","contenido"],"additionalProperties":false}`,
 		Timeout: 30 * time.Second, MaxOut: 4096,
 		Ejecuta: func(raw json.RawMessage) (any, error) {
 			var a struct {
@@ -144,7 +144,7 @@ func RegistrarArchivos() {
 	}
 	Registro["remember"] = Herramienta{
 		Nombre: "remember", Riesgo: Medio,
-		Schema: `{"type":"object","properties":{"dominio":{"type":"string","enum":["user","agent"]},"clave":{"type":"string"},"valor":{"type":"string"}},"required":["dominio","clave","valor"],"additionalProperties":false}`,
+		Schema:  `{"type":"object","properties":{"dominio":{"type":"string","enum":["user","agent"]},"clave":{"type":"string"},"valor":{"type":"string"}},"required":["dominio","clave","valor"],"additionalProperties":false}`,
 		Timeout: 30 * time.Second, MaxOut: 4096,
 		Ejecuta: func(raw json.RawMessage) (any, error) {
 			var a struct {
@@ -169,7 +169,7 @@ func RegistrarArchivos() {
 	}
 	Registro["borrar_archivo"] = Herramienta{
 		Nombre: "borrar_archivo", Riesgo: Alto,
-		Schema: `{"type":"object","properties":{"ruta":{"type":"string"}},"required":["ruta"],"additionalProperties":false}`,
+		Schema:  `{"type":"object","properties":{"ruta":{"type":"string"}},"required":["ruta"],"additionalProperties":false}`,
 		Timeout: 30 * time.Second, MaxOut: 4096,
 		Ejecuta: func(_ json.RawMessage) (any, error) {
 			return nil, fmt.Errorf("riesgo alto: confirmar en la app")
