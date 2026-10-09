@@ -7,8 +7,10 @@ Modelo 3B Q4_0: t3 pp_med=25.99 tg_med=9.61; t4 pp_med=33.87 tg_med=10.02
 Modelo 3B Q4_K_M: t3 pp_med=17.96 tg_med=7.72; t4 pp_med=24.02 tg_med=7.95
 RAM: sustained 1.5B pico VmHWM=1998860kB (~1.9 GB), deriva tg 0%, temp_max=63C.
 Termica: prime<=49, battC=39 estables; contaminadas=0; ruidosas A6=0.
-Huecos honestos: TTFT frio/caliente sin-datos (PID muerto en B); RAM pico
-de bench ausente en resumen; smoke-server (A5.4) nunca corrio; set eval
+TTFT medido 2026-10-09 (1.5B, ~40 tok, con ruido diurno): frio prompt_ms=905,
+caliente cache_n=30/36 prompt_ms=356. Criterio N1 (<=4s) CUMPLE con margen.
+Huecos honestos: cancelacion a 2.0s en smoke-server (mecanismo sin aclarar); RAM pico
+de bench ausente en resumen; set eval
 62 casos redactado pero sin ejecutar contra modelos (precision sin medir).
 
 ## Decision
