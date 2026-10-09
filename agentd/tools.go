@@ -28,19 +28,19 @@ var Registro = map[string]Herramienta{}
 func RegistrarBajoRiesgo() {
 	Registro["estado_bateria"] = Herramienta{
 		Nombre: "estado_bateria", Riesgo: Bajo,
-		Schema: `{"type":"object","properties":{},"additionalProperties":false}`,
+		Schema:  `{"type":"object","properties":{},"additionalProperties":false}`,
 		Timeout: 30 * time.Second, MaxOut: 64 * 1024,
 		Ejecuta: toolBateria,
 	}
 	Registro["listar_apps"] = Herramienta{
 		Nombre: "listar_apps", Riesgo: Bajo,
-		Schema: `{"type":"object","properties":{"filtro":{"type":"string"}},"additionalProperties":false}`,
+		Schema:  `{"type":"object","properties":{"filtro":{"type":"string"}},"additionalProperties":false}`,
 		Timeout: 30 * time.Second, MaxOut: 64 * 1024,
 		Ejecuta: toolApps,
 	}
 	Registro["leer_memoria"] = Herramienta{
 		Nombre: "leer_memoria", Riesgo: Bajo,
-		Schema: `{"type":"object","properties":{"dominio":{"type":"string","enum":["user","agent"]},"clave":{"type":"string"}},"required":["dominio","clave"],"additionalProperties":false}`,
+		Schema:  `{"type":"object","properties":{"dominio":{"type":"string","enum":["user","agent"]},"clave":{"type":"string"}},"required":["dominio","clave"],"additionalProperties":false}`,
 		Timeout: 30 * time.Second, MaxOut: 64 * 1024,
 		Ejecuta: toolMemoria,
 	}
