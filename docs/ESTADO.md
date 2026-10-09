@@ -1,12 +1,12 @@
 # ESTADO nagent (max 25 lineas) - 2026-10-09
-Bloque actual: A6+A7 VERDES. Siguiente: F3 (agentd manual).
-Hecho: A6 rc=0 (8 celdas x3; 1.5B t4 pp87/tg21.7; 3B tg~8-10);
-  A7 decide N0+N2, N1 condicional (falta TTFT+RAM+precision);
-  .ponytail.md creado (sec-8 global); B1+Secrets; CI 3/4 verde.
-Huecos: TTFT sin-datos; RAM bench ausente; smoke-server sin correr;
-  eval 62 casos sin ejecutar; firma APK v2 por verificar en F5.
-En curso: nada pesado. Telefono libre para F3 (prueba manual).
-Bloqueado: F4 espera linea Leonardo (T3).
-Datos: /data/adb/nagent completo; resumen-completo copiado con sha.
-Siguiente: F3 agentd a mano -> C/D -> precision TTFT -> F4 -> G.
-Informes: bloque-A123.md; LIMITACIONES.md; DECISION-ARQUITECTURA.md.
+Bloque actual: F3 VERDE. Siguiente: eval precision (de noche) -> F4.
+Hecho: agentd manual OK (401/200, alto=pendiente, traversal no, audit SI);
+  C6 cableada (5 commits) + redesplegado; fix -np 1 (server moria);
+  TTFT 1.5B frio 905ms caliente 356ms (N1 cumple <=4s); puerto 18080.
+  A6 rc=0; A7 N0+N2 y N1 casi viable (falta precision>=90%).
+  B1+Secrets; CI 3/4; lab 91/0; Go vet+test verdes.
+Huecos: eval 62 casos sin correr; F4 linea Leonardo (T3); F5; G.
+En curso: nada pesado. Telefono en uso diurno (no medir de dia).
+Datos: audit.jsonl escribiendo; diag logs en _quarantine/nagent-diag-*.
+Siguiente: eval de noche -> F4 -> F5 -> G (tag v0.1.0).
+Informes: bloque-A123.md; bloque-F3.md; LIMITACIONES.md; DECISION.
