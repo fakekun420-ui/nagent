@@ -28,9 +28,11 @@ snap_android() { # stdout: listado + sha de SLOGS (vacio si no existe)
   $NS ls -A "$SLOGS" 2>/dev/null | sort
   $NS sh -c 'sha256sum "$1"/* 2>/dev/null' _ "$SLOGS" || true
 }
-snap_raw() { # stdout: listado + sha de SRAW (chroot, globs locales: aqui si valen)
-  ls -A "$SRAW" 2>/dev/null | sort
-  ( cd "$SRAW" 2>/dev/null && sha256sum * 2>/dev/null || true )
+snap_raw() { # listado + sha de SRAW EXCEPTO el log propio: el watcher agrega ahi
+  # la salida del dry-run, asi que incluirlo hacia que 3a fallara siempre (medido 04:20).
+  _f=$(ls -A "$SRAW" 2>/dev/null | grep -vx "espera-wifi.log" | sort)
+  printf "%s\n" "$_f"
+  if [ -n "$_f" ]; then ( cd "$SRAW" 2>/dev/null && sha256sum $_f 2>/dev/null || true ); fi
 }
 log "vigilante inicio (PID $$), sondeo cada 120 s hasta 24 h"
 i=0
@@ -68,6 +70,8 @@ while [ "$i" -lt 720 ]; do
         if [ "$A1" = "$B1" ] && [ "$R1" = "$R2" ]; then
           log "3a OK: dry-run no creo ni modifico nada"
         else
+          [ "$A1" = "$B1" ] || log "3a diff LOGS: [$A1] vs [$B1]"
+          [ "$R1" = "$R2" ] || log "3a diff raw: [$R1] vs [$R2]"
           log "FALLO 3a: dry-run modifico LOGS o raw"
           exit 1
         fi
