@@ -1,11 +1,12 @@
 # ESTADO nagent (max 25 lineas) - 2026-10-10
-Bloque actual: E instalada (APK ea9bf320). Rol asistente BLOQUEADO tecnico.
-Hecho: modulo F4 instalado; agentd 255cdfb1 (health 200, audit SI);
-  app instalada (pm Success, v0.1.0, sig v2); CI 3/4; A6+A7 verdes.
-Bloqueo rol: RoleController dice voice service unqualified (manifest OK,
-  secure settings puestos pero RoleManager manda). Falta lanzar la app 1 vez.
-En curso: campana Artemis E2E sobre la app abierta (adbd 5555 + proxy OK).
-Bloqueado: pantalla (punto 4) con tu OK — concedido; rol asistente pendiente.
-Datos: N1 = 1.5B con protocolo (precision 26%, para pruebas).
-Siguiente: OK pantalla -> lanzar app -> rol -> E2E texto/voz/alto -> F5 -> G.
+Bloque actual: SISTEMA APAGADO por orden (hasta resolver bloqueo UID).
+Hecho: modulo F4 instalado+deshabilitado; agentd detenido; puertos cerrados.
+  Verificado antes de apagar: su={"ok":true} (transporte root SI conecta);
+  directo=FALLO (netd restricted sin UID 10528 en allowlist, causa raiz).
+  B1+Secrets; CI 3/4; APK su-build instalado; A6+A7 verdes; lab 91/0.
+En curso: NADA (todo proceso nagent muerto, telefono libre).
+Bloqueado: TODO hasta resolver: permitir UID en netd, reboot F5, o decidir
+  arquitectura sin loopback-app. Con tu direccion cuando digas.
+Datos intactos: /data/adb/nagent, /data/adb/modules/nagent (disable, reversible).
+Siguiente: tu orden -> resolver red-app -> E2E -> F5 -> G.
 Informes: bloque-A123.md; bloque-F3.md; LIMITACIONES.md; DECISION.
