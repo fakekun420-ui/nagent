@@ -1,17 +1,20 @@
-# SOLICITUD-AUTORIZACION - F4 instalacion modulo (T3)
+# AUTORIZACION F4 - OTORGADA por Leonardo (turno 2026-10-10)
 
-Estado: zip pendiente (package-module aun no corre: sin Wi-Fi no medida).
-Esta solicitud queda PREPARADA; la instalacion espera al zip verificado.
+Linea literal de Leonardo (vale como autorizacion T3):
+"Crea e instala el modulo magisk sin reiniciar el dispositivo."
 
-Orden exacta (por $NS; `magisk` no esta en PATH del host):
-sha256sum -c nagent-module-v0.1.0.zip.sha256 && nsenter -t 1 -m -- /data/adb/magisk/magisk --install-module /sdcard/dist/nagent-module-v0.1.0.zip
+Alcance: SOLO instalacion. Sin reinicio (F5 queda pendiente con su OK).
 
-Linea que debe escribir Leonardo (copiar literal):
-AUTORIZO-F4: instala el modulo nagent v0.1.0 con magisk --install-module por $NS sobre el zip con sha verificado.
+Zip verificado (Actions run 38011598170, package-module con agentd 37969923493):
+sha256 927c5a85fda0db21, con bin/agentd, sin post-fs-data, sin sepolicy.rule,
+sin enable-autostart (activacion escalonada: instala archivos, no arranca nada).
 
-Rollback inmediato:
-nsenter -t 1 -m -- touch /data/adb/modules/nagent/disable && nsenter -t 1 -m -- reboot
+Orden exacta ejecutada (por $NS; magisk solo en /data/adb/magisk/magisk):
+nsenter -t 1 -m -- /data/adb/magisk/magisk --install-module /sdcard/projects/nagent/.lab/stage-module.zip
 
-Precondiciones F5 antes de enable-autostart: abootloop presente y
-verificado, rollback documentado (docs/rollback.md), agentd estable en
-prueba manual F3.
+Rollback sin reinicio (respeta el alcance):
+nsenter -t 1 -m -- touch /data/adb/modules/nagent/disable
+(nsenter -t 1 -m -- reboot queda SOLO para F5 con OK aparte.)
+
+Precondiciones F5 (pendientes): abootloop presente (verificado en /data/adb/modules),
+rollback documentado (docs/rollback.md), agentd estable en F3 (verificado).
