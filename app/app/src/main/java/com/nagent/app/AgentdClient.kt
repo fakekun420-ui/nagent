@@ -40,6 +40,7 @@ object AgentdClient {
         r.append("token=").append(token.length).append(" ")
         r.append(probar("127.0.0.1", 8765))
         r.append(probar("127.0.0.1", 18080))
+        r.append(probar("8.8.8.8", 53))
         if (r.contains("127.0.0.1:8765=ABIERTO")) {
             r.append(salud(token))
         }
@@ -53,7 +54,7 @@ object AgentdClient {
             s.close()
             host + ":" + port + "=ABIERTO "
         } catch (e: Exception) {
-            host + ":" + port + "=" + e.javaClass.simpleName + " "
+            host + ":" + port + "=" + e.javaClass.simpleName + ":" + e.message + " "
         }
     }
 
