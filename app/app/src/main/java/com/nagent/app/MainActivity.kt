@@ -57,8 +57,12 @@ fun PantallaEstado(act: MainActivity) {
         salud = "comprobando..."
         Thread {
             val token = AgentdClient.leerToken(act.filesDir)
-            val ok = token != null && AgentdClient.salud(token)
-            act.runOnUiThread { salud = if (ok) "agentd OK" else "agentd SIN CONTACTO" }
+            val r = if (token == null) {
+                "token=NO"
+            } else {
+                "token=" + token.length + " " + AgentdClient.diagnostico(token)
+            }
+            act.runOnUiThread { salud = r.take(200) }
         }.start()
     }
 
