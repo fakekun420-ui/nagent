@@ -34,18 +34,26 @@ object AgentdClient {
     fun salud(token: String): Boolean = get(token, "/health")?.contains("ok") == true
 
     // Diagnostico visible: dice QUE fallo en vez de solo nulo (E2E).
+    // Prueba TCP puro a 8765 y a 18080 (cerrado = control: debe dar refused).
     fun diagnostico(token: String): String {
+        val r = StringBuilder()
+        r.append("token=").append(token.length).append(" ")
+        r.append(probar("127.0.0.1", 8765))
+        r.append(probar("127.0.0.1", 18080))
+        if (r.contains("127.0.0.1:8765=ABIERTO")) {
+            r.append(salud(token))
+        }
+        return r.toString().take(200)
+    }
+
+    private fun probar(host: String, port: Int): String {
         return try {
-            val c = URL(BASE + "/health").openConnection() as HttpURLConnection
-            c.setRequestProperty("Authorization", "Bearer $token")
-            c.connectTimeout = 5000
-            c.readTimeout = 15000
-            val code = c.responseCode
-            if (code != 200) return "HTTP " + code
-            val txt = c.inputStream.bufferedReader().readText()
-            if (txt.contains("ok")) "agentd OK" else "raro: " + txt.take(60)
+            val s = java.net.Socket()
+            s.connect(java.net.InetSocketAddress(host, port), 3000)
+            s.close()
+            host + ":" + port + "=ABIERTO "
         } catch (e: Exception) {
-            "EX " + e.javaClass.simpleName + ": " + e.message
+            host + ":" + port + "=" + e.javaClass.simpleName + " "
         }
     }
 
