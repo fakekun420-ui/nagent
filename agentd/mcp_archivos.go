@@ -12,6 +12,22 @@ import (
 // Raices permitidas del grupo archivos (D). Nada fuera de aqui.
 var raicesArchivos = []string{"/sdcard/", "/data/adb/nagent/workspace/"}
 
+// raicesReales resuelve los symlinks de las raices una vez (en Android
+// /sdcard es un enlace a /storage/emulated/0; sin esto nada pasaba R12).
+var raicesReales = initRaices()
+
+func initRaices() []string {
+	out := make([]string, 0, len(raicesArchivos))
+	for _, r := range raicesArchivos {
+		if real, err := filepath.EvalSymlinks(filepath.Clean(r)); err == nil {
+			out = append(out, real+string(os.PathSeparator))
+		} else {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 // resolverRuta limpia, resuelve symlinks y exige prefijo permitido.
 // Rechaza traversal, escapes y rutas absolutas fuera de raiz (R12).
 func resolverRuta(ruta string) (string, error) {
@@ -27,8 +43,8 @@ func resolverRuta(ruta string) (string, error) {
 		// Si no existe aun (escritura nueva), valida el padre.
 		real = limpia
 	}
-	for _, r := range raicesArchivos {
-		if strings.HasPrefix(real+string(os.PathSeparator), r) || real == strings.TrimSuffix(r, "/") {
+	for _, r := range raicesReales {
+		if strings.HasPrefix(real+string(os.PathSeparator), r) {
 			return limpia, nil
 		}
 	}
