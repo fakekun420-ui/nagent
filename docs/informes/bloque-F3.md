@@ -10,3 +10,7 @@ INFORME - Bloque F3 (agentd manual + auditoria C6 + TTFT)
   fix -np 1 en spike.sh y agentd/ciclo.go (--np no existe en b11146).
 4. Supuestos: firma APK v2 por verificar con adb install (F5).
 5. Riesgos: telefono en uso diurno (load 6-10, LMK activo); eval largo de noche.
+6. Post-informe: R12 rechazaba /sdcard legitimo (symlink a /storage). Fix
+   raicesReales con EvalSymlinks. Verificado: archivos_listar /sdcard/projects.
+7. F4 instalada (zip 5f511adf, agentd 255cdfb1): customize OK, sin autostart,
+   sin reboot. agentd nuevo vivo, health 200, audit registrando.
