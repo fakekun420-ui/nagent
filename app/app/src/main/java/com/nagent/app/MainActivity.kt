@@ -44,7 +44,8 @@ fun PantallaEstado(act: MainActivity) {
             val r = if (token == null) {
                 Pair("FALLO: sin token (root debe dejarlo en filesDir)", null)
             } else {
-                AgentdClient.llamar(token, par.first, par.second)
+                val t = AgentdClient.llamar(token, par.first, par.second, act.cacheDir)
+                Pair(t.first + " [via " + t.third + "]", t.second)
             }
             act.runOnUiThread {
                 respuesta = r.first.take(400)
@@ -60,7 +61,7 @@ fun PantallaEstado(act: MainActivity) {
             val r = if (token == null) {
                 "token=NO"
             } else {
-                AgentdClient.diagnostico(token)
+                AgentdClient.diagnostico(token, act.cacheDir)
             }
             act.runOnUiThread { salud = r.take(200) }
         }.start()
