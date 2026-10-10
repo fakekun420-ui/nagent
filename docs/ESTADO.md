@@ -1,12 +1,13 @@
-# ESTADO nagent (max 25 lineas) - 2026-10-09
-Bloque actual: F3 VERDE. Siguiente: eval precision (de noche) -> F4.
-Hecho: agentd manual OK (401/200, alto=pendiente, traversal no, audit SI);
-  C6 cableada (5 commits) + redesplegado; fix -np 1 (server moria);
-  TTFT 1.5B frio 905ms caliente 356ms (N1 cumple <=4s); puerto 18080.
-  A6 rc=0; A7 N0+N2 y N1 casi viable (falta precision>=90%).
-  B1+Secrets; CI 3/4; lab 91/0; Go vet+test verdes.
-Huecos: eval 62 casos sin correr; F4 linea Leonardo (T3); F5; G.
-En curso: nada pesado. Telefono en uso diurno (no medir de dia).
-Datos: audit.jsonl escribiendo; diag logs en _quarantine/nagent-diag-*.
-Siguiente: eval de noche -> F4 -> F5 -> G (tag v0.1.0).
+# ESTADO nagent (max 25 lineas) - 2026-10-10
+Bloque actual: F4 INSTALADA sin reboot. Siguiente: pruebas E2E (punto 4).
+Hecho: modulo zip 5f511adf instalado (customize OK, sin autostart);
+  agentd 255cdfb1 vivo (health 200, audit SI); fix R12 verificado;
+  N1 = 1.5B con protocolo (decision Leonardo punto 1);
+  B1+Secrets; CI 4/4 workflows descubiertos (agentd, app, module verdes);
+  APK 2.5 MB firmado (Actions); lab 91/0; Go vet+test verdes.
+Precision 1.5B: 26% (con protocolo). Suficiente para pruebas, no produccion.
+En curso: nada pesado. Listo para instalar APK y probar.
+Bloqueado: F5 (reinicio) con tu OK; G tras pruebas.
+Datos: /data/adb/nagent completo; /data/adb/modules/nagent instalado.
+Siguiente: adb install APK -> asistente por defecto -> E2E texto/voz/alto.
 Informes: bloque-A123.md; bloque-F3.md; LIMITACIONES.md; DECISION.
