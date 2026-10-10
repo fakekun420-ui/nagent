@@ -33,6 +33,22 @@ object AgentdClient {
 
     fun salud(token: String): Boolean = get(token, "/health")?.contains("ok") == true
 
+    // Diagnostico visible: dice QUE fallo en vez de solo nulo (E2E).
+    fun diagnostico(token: String): String {
+        return try {
+            val c = URL(BASE + "/health").openConnection() as HttpURLConnection
+            c.setRequestProperty("Authorization", "Bearer $token")
+            c.connectTimeout = 5000
+            c.readTimeout = 15000
+            val code = c.responseCode
+            if (code != 200) return "HTTP " + code
+            val txt = c.inputStream.bufferedReader().readText()
+            if (txt.contains("ok")) "agentd OK" else "raro: " + txt.take(60)
+        } catch (e: Exception) {
+            "EX " + e.javaClass.simpleName + ": " + e.message
+        }
+    }
+
     // Devuelve Pair(respuesta, pendiente?): pendiente es el nombre si agentd
     // pidio confirmacion (riesgo alto, R7: nunca ejecuta sin ella).
     fun llamar(token: String, nombre: String, argsJson: String): Pair<String, String?> {
