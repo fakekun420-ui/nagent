@@ -60,7 +60,7 @@ fun PantallaEstado(act: MainActivity) {
             val r = if (token == null) {
                 "token=NO"
             } else {
-                "token=" + token.length + " " + AgentdClient.diagnostico(token)
+                AgentdClient.diagnostico(token)
             }
             act.runOnUiThread { salud = r.take(200) }
         }.start()
